@@ -40,7 +40,7 @@ public class PbRowDataSerializationSchema implements SerializationSchema<RowData
     public static final long serialVersionUID = 1L;
 
     private final RowType rowType;
-    private final PbFormatConfig pbFormatConfig;
+    protected final PbFormatConfig pbFormatConfig;
     private transient RowToProtoConverter rowToProtoConverter;
 
     public PbRowDataSerializationSchema(RowType rowType, PbFormatConfig pbFormatConfig) {

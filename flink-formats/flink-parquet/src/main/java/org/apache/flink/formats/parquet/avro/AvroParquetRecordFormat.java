@@ -48,7 +48,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  * way compatible with the provided Avro schema and Avro data models, i.e. {@link GenericData},
  * {@link org.apache.avro.specific.SpecificData}, or {@link org.apache.avro.reflect.ReflectData}.
  */
-class AvroParquetRecordFormat<E> implements StreamFormat<E> {
+public class AvroParquetRecordFormat<E> implements StreamFormat<E> {
 
     private static final long serialVersionUID = 1L;
 
@@ -58,7 +58,7 @@ class AvroParquetRecordFormat<E> implements StreamFormat<E> {
 
     private final SerializableSupplier<GenericData> dataModelSupplier;
 
-    AvroParquetRecordFormat(
+    public AvroParquetRecordFormat(
             TypeInformation<E> type, SerializableSupplier<GenericData> dataModelSupplier) {
         this.type = type;
         this.dataModelSupplier = dataModelSupplier;
@@ -128,7 +128,7 @@ class AvroParquetRecordFormat<E> implements StreamFormat<E> {
         return type;
     }
 
-    private static void checkNotSplit(long fileLen, long splitEnd) {
+    public static void checkNotSplit(long fileLen, long splitEnd) {
         if (splitEnd != fileLen) {
             throw new IllegalArgumentException(
                     String.format(
@@ -142,18 +142,18 @@ class AvroParquetRecordFormat<E> implements StreamFormat<E> {
      * {@link StreamFormat.Reader} implementation. Using {@link ParquetReader} internally to read
      * avro {@link GenericRecord} from parquet {@link InputFile}.
      */
-    private static class AvroParquetRecordReader<E> implements StreamFormat.Reader<E> {
+    public static class AvroParquetRecordReader<E> implements StreamFormat.Reader<E> {
 
         private final ParquetReader<E> parquetReader;
 
         private long skipCount;
         private final boolean checkpointed;
 
-        private AvroParquetRecordReader(ParquetReader<E> parquetReader) {
+        public AvroParquetRecordReader(ParquetReader<E> parquetReader) {
             this(parquetReader, 0, false);
         }
 
-        private AvroParquetRecordReader(
+        public AvroParquetRecordReader(
                 ParquetReader<E> parquetReader, long skipCount, boolean checkpointed) {
             this.parquetReader = parquetReader;
             this.skipCount = skipCount;

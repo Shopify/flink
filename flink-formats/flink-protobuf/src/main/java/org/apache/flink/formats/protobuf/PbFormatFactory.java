@@ -55,7 +55,7 @@ public class PbFormatFactory implements DeserializationFormatFactory, Serializat
         return new PbEncodingFormat(buildConfig(formatOptions));
     }
 
-    private static PbFormatConfig buildConfig(ReadableConfig formatOptions) {
+    public static PbFormatConfig buildConfig(ReadableConfig formatOptions) {
         PbFormatConfig.PbFormatConfigBuilder configBuilder =
                 new PbFormatConfig.PbFormatConfigBuilder();
         configBuilder.messageClassName(formatOptions.get(PbFormatOptions.MESSAGE_CLASS_NAME));
