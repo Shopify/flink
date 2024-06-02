@@ -283,13 +283,13 @@
                         <!-- dependency convergence -->
                         <groupId>com.nimbusds</groupId>
                         <artifactId>nimbus-jose-jwt</artifactId>
-                        <version>4.41.1</version>
+                        <version>9.37.2</version>
                     </dependency>
                     <dependency>
                         <!-- dependency convergence -->
                         <groupId>com.squareup.okio</groupId>
                         <artifactId>okio</artifactId>
-                        <version>1.17.2</version>
+                        <version>1.17.6</version>
                     </dependency>
                 </dependencies>
             </dependencyManagement>
