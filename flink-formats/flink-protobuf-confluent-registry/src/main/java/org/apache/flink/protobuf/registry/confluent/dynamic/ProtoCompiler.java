@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.protobuf.registry.confluent.dynamic.deserializer;
+package org.apache.flink.protobuf.registry.confluent.dynamic;
 
 import com.github.os72.protocjar.Protoc;
 import com.google.protobuf.DescriptorProtos;

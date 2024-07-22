@@ -26,7 +26,7 @@ import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.formats.protobuf.PbFormatConfig;
 import org.apache.flink.formats.protobuf.serialize.MessageSerializer;
 import org.apache.flink.formats.protobuf.serialize.RowToProtoConverter;
-import org.apache.flink.protobuf.registry.confluent.dynamic.deserializer.ProtoCompiler;
+import org.apache.flink.protobuf.registry.confluent.dynamic.ProtoCompiler;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.FlinkRuntimeException;

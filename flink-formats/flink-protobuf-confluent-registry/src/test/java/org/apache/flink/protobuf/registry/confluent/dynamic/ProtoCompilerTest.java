@@ -16,9 +16,8 @@
  * limitations under the License.
  */
 
-package org.apache.flink.protobuf.registry.confluent.dynamic.deserializer;
+package org.apache.flink.protobuf.registry.confluent.dynamic;
 
-import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
