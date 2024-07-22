@@ -20,6 +20,7 @@ package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
+import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
 
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
@@ -29,9 +30,12 @@ import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.data.TimestampData;
+import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.RowType;
 
+import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.VarCharType;
 
 import org.junit.jupiter.api.Assertions;
@@ -42,7 +46,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ProtoRegistryDynamicSerializationSchemaTest {
-    private static final String CLASS_NAME = "TestClass";
     private static final String SUBJECT_NAME = "testSubject";
     private static final String SCHEMA_REGISTRY_URL = "http://registry:8081";
 
@@ -54,13 +57,13 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
     }
 
     @Test
-    public void testSerialize() throws Exception {
+    public void testSerializePrimitiveTypes() throws Exception {
         RowType rowType = TestUtils.createRowType(
                 new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
                 new RowType.RowField(TestUtils.INT_FIELD, new IntType())
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(2);
@@ -69,29 +72,73 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        ProtobufSchema actualRegisteredSchema = (ProtobufSchema) mockSchemaRegistryClient.getSchemas(SUBJECT_NAME, false, true).get(0);
+        ProtobufSchema actualRegisteredSchema = getRegisteredSchema();
         ProtobufSchema expectedSchema = new ProtobufSchema(
-                "syntax = \"proto3\";\n" +
-                "package " + TestUtils.DEFAULT_PACKAGE + ";\n" +
-                "option java_package = \"org.apache.flink.formats.protobuf.proto\";\n" +
-                "option java_outer_classname = \"TestClass_OuterClass\";\n" +
-                "option java_multiple_files = false;" +
-                "message " + CLASS_NAME + "{\n" +
-                "  string string = 1;\n" +
-                "  int32 int = 2;\n" +
+                sharedSchemaComponents() +
+                "  string " + TestUtils.STRING_FIELD + " = 1;\n" +
+                "  int32 " + TestUtils.INT_FIELD + " = 2;\n" +
                 "}\n");
         Assertions.assertEquals(expectedSchema, actualRegisteredSchema);
 
-        Map<String, String> opts = new HashMap<>();
-        opts.put("schema.registry.url", SCHEMA_REGISTRY_URL);
-        KafkaProtobufDeserializer deser = new KafkaProtobufDeserializer(mockSchemaRegistryClient, opts);
-        Message message = deser.deserialize(null, actualBytes);
+        Message message = parseBytesToMessage(actualBytes);
         Descriptors.FieldDescriptor stringField = message.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
         Descriptors.FieldDescriptor intField = message.getDescriptorForType().findFieldByName(TestUtils.INT_FIELD);
 
         Assertions.assertEquals(TestUtils.TEST_STRING, message.getField(stringField));
         Assertions.assertEquals(TestUtils.TEST_INT, message.getField(intField));
 
+    }
+
+//    @Test
+//    public void testSerializeGoogleTypes() throws Exception {
+//        String tsField = "ts";
+//        RowType rowType = TestUtils.createRowType(
+//                new RowType.RowField(tsField, new TimestampType())
+//        );
+//        ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
+//                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+//        protoRegistryDynamicSerializationSchema.open(null);
+//
+//        GenericRowData rowData = new GenericRowData(1);
+//        rowData.setField(0, TimestampData.fromEpochMillis(123));
+//
+//        byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
+//
+//        ProtobufSchema actualRegisteredSchema = getRegisteredSchema();
+//        ProtobufSchema expectedSchema = new ProtobufSchema(
+//                sharedSchemaComponents() +
+//                        "  google.protobuf.Timestamp" + tsField + "= 1;\n" +
+//                        "}\n");
+//        Assertions.assertEquals(expectedSchema, actualRegisteredSchema);
+//
+//        Message message = parseBytesToMessage(actualBytes);
+//        Descriptors.FieldDescriptor tsFieldDescriptor = message.getDescriptorForType().findFieldByName(tsField);
+//
+//        Assertions.assertEquals(
+//                Timestamp.newBuilder().setSeconds(123).setNanos(456).build(),
+//                message.getField(tsFieldDescriptor)
+//        );
+//
+//    }
+
+    private static String sharedSchemaComponents() {
+        return "syntax = \"proto3\";\n" +
+                "package " + TestUtils.DEFAULT_PACKAGE + ";\n" +
+                "option java_package = \"org.apache.flink.formats.protobuf.proto\";\n" +
+                "option java_outer_classname = \"TestClass_OuterClass\";\n" +
+                "option java_multiple_files = false;" +
+                "message " + TestUtils.DEFAULT_CLASS_NAME + "{\n";
+    }
+
+    private ProtobufSchema getRegisteredSchema() throws Exception {
+        return (ProtobufSchema) mockSchemaRegistryClient.getSchemas(SUBJECT_NAME, false, true).get(0);
+    }
+
+    private Message parseBytesToMessage(byte[] bytes) throws Exception {
+        Map<String, String> opts = new HashMap<>();
+        opts.put("schema.registry.url", SCHEMA_REGISTRY_URL);
+        KafkaProtobufDeserializer deser = new KafkaProtobufDeserializer(mockSchemaRegistryClient, opts);
+        return deser.deserialize(null, bytes);
     }
 
 }

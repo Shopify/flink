@@ -91,4 +91,29 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         Assertions.assertEquals(TestUtils.TEST_LONG, actual.getLong(2));
     }
 
+//    @Test
+//    public void googleTypeDeserializerTest() throws Exception {
+//        TimestampProto3OuterClass.TimestampProto3 in = TimestampProto3OuterClass.TimestampProto3.newBuilder()
+//                .setTs(
+//                        com.google.protobuf.Timestamp.newBuilder()
+//                                .setSeconds(123)
+//                                .setNanos(0)
+//                                .build()
+//                )
+//                .build();
+//        byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
+//
+//        RowType rowType = TestUtils.createRowType(
+//                new RowType.RowField("ts", new TimestampType())
+//        );
+//
+//        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
+//                mockSchemaRegistryClient, rowType, null, formatConfig
+//        );
+//        deser.open(null);
+//
+//        RowData actual = deser.deserialize(inBytes);
+//        System.out.println(actual);
+//    }
+
 }

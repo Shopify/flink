@@ -22,6 +22,7 @@ import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Type;
 
+import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 
 import org.apache.flink.table.types.logical.RowType;
@@ -46,6 +47,7 @@ public class RowToProtobufSchemaConverter {
         fileDescriptorProtoBuilder.setName(className);
         fileDescriptorProtoBuilder.setPackage(packageName);
         fileDescriptorProtoBuilder.setSyntax("proto3");
+        fileDescriptorProtoBuilder.addDependency("google/protobuf/timestamp.proto");
 
         // Create a DescriptorProto builder for the message type
         DescriptorProtos.DescriptorProto.Builder descriptorProtoBuilder = DescriptorProtos.DescriptorProto.newBuilder();
@@ -67,7 +69,10 @@ public class RowToProtobufSchemaConverter {
 
         // Build the FileDescriptor
         DescriptorProtos.FileDescriptorProto fileDescriptorProto = fileDescriptorProtoBuilder.build();
-        Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, new Descriptors.FileDescriptor[0]);
+        Descriptors.FileDescriptor[] dependencies = new Descriptors.FileDescriptor[] {
+                Timestamp.getDescriptor().getFile()
+        };
+        Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, dependencies);
 
         return new ProtobufSchema(fileDescriptor);
     }
@@ -90,11 +95,6 @@ public class RowToProtobufSchemaConverter {
                 return;
             case INTEGER:
                 input.setType(Type.TYPE_INT32);
-                return;
-            case DECIMAL:
-                // We convert decimals to double since org.apache.flink.formats.protobuf.serialize.RowToProtoConverter
-                // does not support decimal types yet.
-                input.setType(Type.TYPE_DOUBLE);
                 return;
 
 //            case BIGINT:

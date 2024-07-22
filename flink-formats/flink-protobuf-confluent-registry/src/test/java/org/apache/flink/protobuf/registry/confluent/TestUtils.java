@@ -24,9 +24,7 @@ import org.apache.flink.table.types.logical.RowType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class TestUtils {
 
@@ -45,11 +43,11 @@ public class TestUtils {
     public static final String DOUBLE_FIELD = "double";
     public static final String BOOL_FIELD = "bool";
     public static final String BYTES_FIELD = "bytes";
-    public static final String DECIMAL_FIELD = "decimal";
 
     static public final String DEFAULT_PACKAGE = "org.apache.flink.formats.protobuf.proto";
     static public final int DEFAULT_SCHEMA_ID = 1;
     static public final String DEFAULT_CLASS_SUFFIX = "123";
+    static public final String DEFAULT_CLASS_NAME = "TestClass";
 
     public static RowType createRowType(RowType.RowField... fields) {
         List<RowType.RowField> fieldList = new ArrayList<>();
