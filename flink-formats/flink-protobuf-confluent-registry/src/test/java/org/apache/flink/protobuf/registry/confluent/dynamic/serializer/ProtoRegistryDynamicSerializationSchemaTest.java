@@ -19,7 +19,6 @@
 package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 
 import com.google.protobuf.Descriptors;
-import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
 
@@ -27,7 +26,6 @@ import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 
-import org.apache.flink.formats.protobuf.proto.FlatProto3OuterClass;
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.StringData;
@@ -78,7 +76,6 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 "option java_package = \"org.apache.flink.formats.protobuf.proto\";\n" +
                 "option java_outer_classname = \"TestClass_OuterClass\";\n" +
                 "option java_multiple_files = false;" +
-                "import \"confluent/type/decimal.proto\";\n" +
                 "message " + CLASS_NAME + "{\n" +
                 "  string string = 1;\n" +
                 "  int32 int = 2;\n" +
@@ -96,4 +93,5 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         Assertions.assertEquals(TestUtils.TEST_INT, message.getField(intField));
 
     }
+
 }

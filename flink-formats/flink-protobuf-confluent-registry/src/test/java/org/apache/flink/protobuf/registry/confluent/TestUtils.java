@@ -45,6 +45,7 @@ public class TestUtils {
     public static final String DOUBLE_FIELD = "double";
     public static final String BOOL_FIELD = "bool";
     public static final String BYTES_FIELD = "bytes";
+    public static final String DECIMAL_FIELD = "decimal";
 
     static public final String DEFAULT_PACKAGE = "org.apache.flink.formats.protobuf.proto";
     static public final int DEFAULT_SCHEMA_ID = 1;

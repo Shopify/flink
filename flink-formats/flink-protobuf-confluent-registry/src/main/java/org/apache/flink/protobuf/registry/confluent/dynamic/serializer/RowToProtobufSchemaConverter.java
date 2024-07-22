@@ -22,15 +22,8 @@ import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Type;
 
-import com.google.protobuf.GeneratedMessageV3;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 
-import io.confluent.protobuf.MetaProto;
-import io.confluent.protobuf.type.DecimalProto;
-
-import org.apache.avro.LogicalTypes;
-
-import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.LogicalType;
 
@@ -53,7 +46,6 @@ public class RowToProtobufSchemaConverter {
         fileDescriptorProtoBuilder.setName(className);
         fileDescriptorProtoBuilder.setPackage(packageName);
         fileDescriptorProtoBuilder.setSyntax("proto3");
-        fileDescriptorProtoBuilder.addDependency("confluent/type/decimal.proto");
 
         // Create a DescriptorProto builder for the message type
         DescriptorProtos.DescriptorProto.Builder descriptorProtoBuilder = DescriptorProtos.DescriptorProto.newBuilder();
@@ -75,14 +67,14 @@ public class RowToProtobufSchemaConverter {
 
         // Build the FileDescriptor
         DescriptorProtos.FileDescriptorProto fileDescriptorProto = fileDescriptorProtoBuilder.build();
-        Descriptors.FileDescriptor[] dependencies = new Descriptors.FileDescriptor[] {
-                DecimalProto.getDescriptor().getFile()
-        };
-        Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, dependencies);
+        Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileDescriptorProto, new Descriptors.FileDescriptor[0]);
 
         return new ProtobufSchema(fileDescriptor);
     }
 
+    /**
+     * Set the type of a FieldDescriptorProto based on the logical type of the Flink field.
+     */
     private static void setProtoField(DescriptorProtos.FieldDescriptorProto.Builder input, LogicalType rowFieldType) {
         switch (rowFieldType.getTypeRoot()) {
             case CHAR:
@@ -100,17 +92,11 @@ public class RowToProtobufSchemaConverter {
                 input.setType(Type.TYPE_INT32);
                 return;
             case DECIMAL:
-                DecimalType decimalType = (DecimalType) rowFieldType;
-                input.setType(Type.TYPE_MESSAGE);
-                MetaProto.Meta options = MetaProto.Meta.newBuilder()
-                        .putParams("precision", String.valueOf(decimalType.getPrecision()))
-                        .putParams("scale", String.valueOf(decimalType.getScale())).build();
-                DescriptorProtos.FieldOptions.Builder optionsBuilder =
-                        DescriptorProtos.FieldOptions.newBuilder();
-                optionsBuilder.setExtension(MetaProto.fieldMeta, options);
-                input.setOptions(optionsBuilder.build());
-                input.setTypeName("confluent.type.Decimal");
+                // We convert decimals to double since org.apache.flink.formats.protobuf.serialize.RowToProtoConverter
+                // does not support decimal types yet.
+                input.setType(Type.TYPE_DOUBLE);
                 return;
+
 //            case BIGINT:
 //                return Type.TYPE_INT64;
 //            case FLOAT:
