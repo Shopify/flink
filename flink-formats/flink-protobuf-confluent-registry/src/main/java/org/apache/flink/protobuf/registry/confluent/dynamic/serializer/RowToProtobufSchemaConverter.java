@@ -25,9 +25,12 @@ import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Type;
 import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 
+import org.apache.flink.table.types.logical.ArrayType;
+import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.LogicalType;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class RowToProtobufSchemaConverter {
@@ -42,6 +45,7 @@ public class RowToProtobufSchemaConverter {
     }
 
     public ProtobufSchema convert() throws Descriptors.DescriptorValidationException {
+
         // Create a FileDescriptorProto builder
         DescriptorProtos.FileDescriptorProto.Builder fileDescriptorProtoBuilder = DescriptorProtos.FileDescriptorProto.newBuilder();
         fileDescriptorProtoBuilder.setName(className);
@@ -54,15 +58,7 @@ public class RowToProtobufSchemaConverter {
         descriptorProtoBuilder.setName(className);
 
         // Convert each field in RowType to a FieldDescriptorProto
-        List<RowType.RowField> fields = rowType.getFields();
-        for (int i = 0; i < fields.size(); i++) {
-            RowType.RowField field = fields.get(i);
-            DescriptorProtos.FieldDescriptorProto.Builder fieldDescriptorProtoBuilder = DescriptorProtos.FieldDescriptorProto.newBuilder();
-            fieldDescriptorProtoBuilder.setName(field.getName());
-            fieldDescriptorProtoBuilder.setNumber(i + 1);
-            setProtoField(fieldDescriptorProtoBuilder, field.getType());
-            descriptorProtoBuilder.addField(fieldDescriptorProtoBuilder);
-        }
+        recurseRowType(rowType, descriptorProtoBuilder);
 
         // Add the message type to the file descriptor
         fileDescriptorProtoBuilder.addMessageType(descriptorProtoBuilder);
@@ -77,10 +73,73 @@ public class RowToProtobufSchemaConverter {
         return new ProtobufSchema(fileDescriptor);
     }
 
+    private void recurseRowType(RowType rowType, DescriptorProtos.DescriptorProto.Builder currentBuilder) {
+
+        List<RowType.RowField> fields = rowType.getFields();
+        for (int i = 0; i < fields.size(); i++) {
+            RowType.RowField field = fields.get(i);
+            DescriptorProtos.FieldDescriptorProto.Builder fieldDescriptorProtoBuilder = DescriptorProtos.FieldDescriptorProto.newBuilder();
+            fieldDescriptorProtoBuilder.setName(field.getName());
+            fieldDescriptorProtoBuilder.setNumber(i + 1);
+            if (field.getType() instanceof RowType) {
+                DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+                String nestedTypeName = nestedClassName(field.getName());
+                newBuilder.setName(nestedTypeName);
+                recurseRowType((RowType) field.getType(), newBuilder);
+                currentBuilder.addNestedType(newBuilder);
+
+                fieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
+                fieldDescriptorProtoBuilder.setTypeName(nestedTypeName);
+
+            } else if (field.getType() instanceof ArrayType) {
+                if (((ArrayType) field.getType()).getElementType() instanceof RowType) {
+                    DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+                    String nestedTypeName = nestedClassName(field.getName());
+                    newBuilder.setName(nestedTypeName);
+                    recurseRowType(
+                            (RowType) ((ArrayType) field.getType()).getElementType(),
+                            newBuilder);
+                    currentBuilder.addNestedType(newBuilder);
+
+                    fieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
+                    fieldDescriptorProtoBuilder.setTypeName(nestedTypeName);
+                } else {
+                    setProtoField(fieldDescriptorProtoBuilder, ((ArrayType) field.getType()).getElementType());
+                }
+                fieldDescriptorProtoBuilder.setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED);
+            } else if (field.getType() instanceof MapType) {
+                List<RowType.RowField> mapFields = new ArrayList<>();
+                mapFields.add(new RowType.RowField(
+                        "key",
+                        ((MapType) field.getType()).getKeyType()));
+                mapFields.add(new RowType.RowField(
+                        "value",
+                        ((MapType) field.getType()).getValueType()));
+
+                DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+                String nestedTypeName = nestedClassName(field.getName());
+                newBuilder.setName(nestedTypeName);
+                recurseRowType(new RowType(mapFields), newBuilder);
+                newBuilder.setOptions(DescriptorProtos.MessageOptions.newBuilder().setMapEntry(true).build());
+
+                currentBuilder.addNestedType(newBuilder);
+
+                fieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
+                fieldDescriptorProtoBuilder.setTypeName(nestedTypeName);
+                fieldDescriptorProtoBuilder.setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED);
+            } else {
+                setProtoField(fieldDescriptorProtoBuilder, field.getType());
+            }
+            currentBuilder.addField(fieldDescriptorProtoBuilder.build());
+        }
+
+    }
+
     /**
      * Set the type of a FieldDescriptorProto based on the logical type of the Flink field.
      */
-    private static void setProtoField(DescriptorProtos.FieldDescriptorProto.Builder input, LogicalType rowFieldType) {
+    private static void setProtoField(DescriptorProtos.FieldDescriptorProto.Builder input,
+                                      LogicalType rowFieldType) {
         switch (rowFieldType.getTypeRoot()) {
             case CHAR:
             case VARCHAR:
@@ -93,19 +152,33 @@ public class RowToProtobufSchemaConverter {
             case VARBINARY:
                 input.setType(Type.TYPE_BYTES);
                 return;
+            case TINYINT:
+            case SMALLINT:
             case INTEGER:
                 input.setType(Type.TYPE_INT32);
                 return;
-
-//            case BIGINT:
-//                return Type.TYPE_INT64;
-//            case FLOAT:
-//                return Type.TYPE_FLOAT;
-//            case DOUBLE:
-//                return Type.TYPE_DOUBLE;
-            // Add more cases as needed
+            case BIGINT:
+                input.setType(Type.TYPE_INT64);
+                return;
+            case FLOAT:
+                input.setType(Type.TYPE_FLOAT);
+                return;
+            case DOUBLE:
+                input.setType(Type.TYPE_DOUBLE);
+                return;
+            case DATE:
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+            case TIMESTAMP_WITH_TIME_ZONE:
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                input.setType(Type.TYPE_MESSAGE);
+                input.setTypeName("google.protobuf.Timestamp");
+                return;
             default:
                 throw new IllegalArgumentException("Unsupported logical type: " + rowFieldType);
         }
+    }
+
+    private String nestedClassName(String originalFieldName) {
+        return originalFieldName + "Class";
     }
 }

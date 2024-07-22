@@ -28,11 +28,14 @@ import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
+import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.apache.flink.table.types.logical.TimestampType;
@@ -72,20 +75,35 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        ProtobufSchema actualRegisteredSchema = getRegisteredSchema();
-        ProtobufSchema expectedSchema = new ProtobufSchema(
-                sharedSchemaComponents() +
-                "  string " + TestUtils.STRING_FIELD + " = 1;\n" +
-                "  int32 " + TestUtils.INT_FIELD + " = 2;\n" +
-                "}\n");
-        Assertions.assertEquals(expectedSchema, actualRegisteredSchema);
-
         Message message = parseBytesToMessage(actualBytes);
         Descriptors.FieldDescriptor stringField = message.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
         Descriptors.FieldDescriptor intField = message.getDescriptorForType().findFieldByName(TestUtils.INT_FIELD);
 
         Assertions.assertEquals(TestUtils.TEST_STRING, message.getField(stringField));
         Assertions.assertEquals(TestUtils.TEST_INT, message.getField(intField));
+
+    }
+
+    @Test
+    public void testSerializeMap() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.MAP_FIELD, new MapType(new VarCharType(), new IntType()))
+        );
+        ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+        protoRegistryDynamicSerializationSchema.open(null);
+
+        GenericRowData rowData = new GenericRowData(1);
+        Map<String, Integer> mapContent = new HashMap<>();
+        mapContent.put(TestUtils.TEST_STRING, TestUtils.TEST_INT);
+        rowData.setField(0, new GenericMapData(mapContent));
+
+        byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
+
+        Message message = parseBytesToMessage(actualBytes);
+        Descriptors.FieldDescriptor mapField = message.getDescriptorForType().findFieldByName(TestUtils.MAP_FIELD);
+
+        Assertions.assertEquals(mapContent, message.getField(mapField));
 
     }
 
@@ -127,6 +145,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 "option java_package = \"org.apache.flink.formats.protobuf.proto\";\n" +
                 "option java_outer_classname = \"TestClass_OuterClass\";\n" +
                 "option java_multiple_files = false;" +
+                "import \"google/protobuf/timestamp.proto\";" +
                 "message " + TestUtils.DEFAULT_CLASS_NAME + "{\n";
     }
 

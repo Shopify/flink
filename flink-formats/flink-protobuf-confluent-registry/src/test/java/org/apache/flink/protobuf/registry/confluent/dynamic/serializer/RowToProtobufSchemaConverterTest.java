@@ -21,7 +21,10 @@ package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
+import org.apache.flink.table.types.logical.ArrayType;
+import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.apache.flink.table.types.logical.TimestampType;
@@ -43,9 +46,114 @@ public class RowToProtobufSchemaConverterTest {
         ProtobufSchema actual = converter.convert();
         ProtobufSchema expected = new ProtobufSchema(
                 sharedSchemaComponents() +
-                "  string" + TestUtils.STRING_FIELD + "= 1;\n" +
-                "  int32" + TestUtils.INT_FIELD + "= 2;\n" +
+                "  string " + TestUtils.STRING_FIELD + "= 1;\n" +
+                "  int32 " + TestUtils.INT_FIELD + "= 2;\n" +
                 "}\n");
+        Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testNestedRowType() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.NESTED_FIELD, TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                        new RowType.RowField(TestUtils.INT_FIELD, new IntType())
+                ))
+        );
+        RowToProtobufSchemaConverter converter = new RowToProtobufSchemaConverter(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType);
+        ProtobufSchema actual = converter.convert();
+        ProtobufSchema expected = new ProtobufSchema(
+                sharedSchemaComponents() +
+                        TestUtils.NESTED_FIELD + "Class " + TestUtils.NESTED_FIELD + "= 1;\n" +
+                        "  message " + TestUtils.NESTED_FIELD + "Class {\n" +
+                        "  string " + TestUtils.STRING_FIELD + "= 1;\n" +
+                        "  int32 " + TestUtils.INT_FIELD + "= 2;\n" +
+                        "}}\n");
+        Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testDoublyNestedRowType() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.NESTED_FIELD, TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                        new RowType.RowField(TestUtils.INT_FIELD, new IntType()),
+                        new RowType.RowField(TestUtils.NESTED_FIELD, TestUtils.createRowType(
+                                new RowType.RowField(TestUtils.BOOL_FIELD, new BooleanType())
+                        ))
+                ))
+        );
+        RowToProtobufSchemaConverter converter = new RowToProtobufSchemaConverter(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType);
+        ProtobufSchema actual = converter.convert();
+        ProtobufSchema expected = new ProtobufSchema(
+                sharedSchemaComponents() +
+                        "  nestedClass nested = 1;\n"
+                        + "\n"
+                        + "  message nestedClass {\n"
+                        + "    string string = 1;\n"
+                        + "    int32 int = 2;\n"
+                        + "    nestedClass nested = 3;\n"
+                        + "  \n"
+                        + "    message nestedClass {\n"
+                        + "      bool bool = 1;\n"
+                        + "    }\n"
+                        + "  }\n"
+                        + "}");
+        Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testArray() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.ARRAY_FIELD, new ArrayType(new IntType()))
+        );
+        RowToProtobufSchemaConverter converter = new RowToProtobufSchemaConverter(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType);
+        ProtobufSchema actual = converter.convert();
+        ProtobufSchema expected = new ProtobufSchema(
+                sharedSchemaComponents() +
+                        "  repeated int32 array = 1;\n"
+                        + "}");
+        Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testNestedArray() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.ARRAY_FIELD, new ArrayType(
+                        TestUtils.createRowType(
+                                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType())
+                        )
+                ))
+        );
+        RowToProtobufSchemaConverter converter = new RowToProtobufSchemaConverter(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType);
+        ProtobufSchema actual = converter.convert();
+        ProtobufSchema expected = new ProtobufSchema(
+                sharedSchemaComponents() +
+                        "  repeated arrayClass array = 1;\n"
+                        + "\n"
+                        + "  message arrayClass {\n"
+                        + "    string string = 1;\n"
+                        + "  }\n"
+                        + "}");
+        Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testMapOfPrimitives() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.MAP_FIELD, new MapType(new VarCharType(), new IntType()))
+        );
+        RowToProtobufSchemaConverter converter = new RowToProtobufSchemaConverter(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType);
+        ProtobufSchema actual = converter.convert();
+        ProtobufSchema expected = new ProtobufSchema(
+                sharedSchemaComponents() +
+                        "  map<string, int32> map = 1;\n"
+                        + "}");
         Assertions.assertEquals(expected, actual);
     }
 
