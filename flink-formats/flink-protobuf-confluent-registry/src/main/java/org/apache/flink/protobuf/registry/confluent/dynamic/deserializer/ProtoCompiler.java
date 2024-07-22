@@ -34,6 +34,7 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -86,8 +87,9 @@ public class ProtoCompiler {
      *
      * @return the Class of the generated message type
      */
-    public Class generateMessageClass(ProtobufSchema protobufSchema, int schemaId) {
-        Path schemaFilePath = writeProto(protobufSchema, schemaId);
+    public Class generateMessageClass(ProtobufSchema protobufSchema, Integer schemaId) {
+        String suffixedProtoClassName = suffixedProtoClassName(protobufSchema, schemaId);
+        Path schemaFilePath = writeProto(protobufSchema, suffixedProtoClassName);
 
         String indexedClassName = schemaFilePath.getFileName().toString().replace(".proto", "");
         Path javaOutDir = generateJavaClassDef(schemaFilePath, indexedClassName);
@@ -153,11 +155,25 @@ public class ProtoCompiler {
         return javaOutDir;
     }
 
-    private Path writeProto(ProtobufSchema protobufSchema, int schemaId)  {
-        String className = getClassNameFromProto(protobufSchema) + "_" + schemaId + "_" + classSuffix;
-        ProtobufSchema withJavaOuterClassName = setProtoOptions(protobufSchema, className);
+    private String suffixedProtoClassName(ProtobufSchema protobufSchema, Integer schemaId) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getClassNameFromProto(protobufSchema));
+        if (schemaId != null) {
+            sb.append("_");
+            sb.append(schemaId);
+        }
+        if (classSuffix != null) {
+            sb.append("_");
+            sb.append(classSuffix);
+        }
+        return sb.toString();
+    }
+
+    private Path writeProto(ProtobufSchema protobufSchema, String suffixedProtoClassName)  {
+
+        ProtobufSchema withJavaOuterClassName = setProtoOptions(protobufSchema, suffixedProtoClassName);
         String schema = withJavaOuterClassName.rawSchema().toSchema();
-        String schemaFileName = className + ".proto";
+        String schemaFileName = suffixedProtoClassName + ".proto";
         Path schemaFilePath = protosDir.resolve(schemaFileName);
         try {
             java.io.FileWriter myWriter = new java.io.FileWriter(schemaFilePath.toFile());
@@ -211,8 +227,15 @@ public class ProtoCompiler {
         BufferedReader reader = new BufferedReader(new InputStreamReader(protoFileStream, StandardCharsets.UTF_8));
         String protoFileContents = reader.lines().collect(Collectors.joining("\n"));
 
-        String protoFileName = resourceName.substring(resourceName.lastIndexOf("/") + 1);
-        Path protoFilePath = confluentProtosDir.resolve(protoFileName);
+        // Create any necessary subdirectory
+        String[] resourceNameParts = resourceName.substring(1).split("/");
+        for (int i = 1; i < resourceNameParts.length - 1; i++) {
+            String childDirName = resourceNameParts[i];
+            Path currentParentDir = parentDir.resolve(String.join("/", Arrays.copyOfRange(resourceNameParts, 0, i)));
+            createChildDir(currentParentDir, childDirName);
+        }
+
+        Path protoFilePath = parentDir.resolve(resourceName.substring(1));
         try {
             Files.write(protoFilePath, protoFileContents.getBytes());
         } catch (Exception e) {

@@ -23,6 +23,7 @@ import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
 
 import org.apache.flink.formats.protobuf.proto.FlatProto3OuterClass;
 
+import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
@@ -59,14 +60,14 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
     @Test
     public void deserializerTest() throws Exception {
         FlatProto3OuterClass.FlatProto3 in = FlatProto3OuterClass.FlatProto3.newBuilder()
-                .setString(ProtoCompilerTest.TEST_STRING)
-                .setInt(ProtoCompilerTest.TEST_INT)
-                .setLong(ProtoCompilerTest.TEST_LONG)
-                .setFloat(ProtoCompilerTest.TEST_FLOAT)
-                .setDouble(ProtoCompilerTest.TEST_DOUBLE)
-                .addInts(ProtoCompilerTest.TEST_INT)
-                .setBytes(ProtoCompilerTest.TEST_BYTES)
-                .setBool(ProtoCompilerTest.TEST_BOOL)
+                .setString(TestUtils.TEST_STRING)
+                .setInt(TestUtils.TEST_INT)
+                .setLong(TestUtils.TEST_LONG)
+                .setFloat(TestUtils.TEST_FLOAT)
+                .setDouble(TestUtils.TEST_DOUBLE)
+                .addInts(TestUtils.TEST_INT)
+                .setBytes(TestUtils.TEST_BYTES)
+                .setBool(TestUtils.TEST_BOOL)
                 .build();
 
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
@@ -85,9 +86,9 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
 
         RowData actual = deser.deserialize(inBytes);
         Assertions.assertEquals(3, actual.getArity());
-        Assertions.assertEquals(ProtoCompilerTest.TEST_STRING, actual.getString(0).toString());
-        Assertions.assertEquals(ProtoCompilerTest.TEST_INT, actual.getInt(1));
-        Assertions.assertEquals(ProtoCompilerTest.TEST_LONG, actual.getLong(2));
+        Assertions.assertEquals(TestUtils.TEST_STRING, actual.getString(0).toString());
+        Assertions.assertEquals(TestUtils.TEST_INT, actual.getInt(1));
+        Assertions.assertEquals(TestUtils.TEST_LONG, actual.getLong(2));
     }
 
 }

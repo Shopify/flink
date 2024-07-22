@@ -47,19 +47,21 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.DEFAULT_CLASS_SUFFIX;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.DEFAULT_PACKAGE;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.DEFAULT_SCHEMA_ID;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_BOOL;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_BYTES;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_DOUBLE;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_FLOAT;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_INT;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_LONG;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.TEST_STRING;
+
 public class ProtoCompilerTest {
 
-    static public final String TEST_STRING = "test";
-    static public final int TEST_INT = 42;
-    static public final long TEST_LONG = 99L;
-    static public final float TEST_FLOAT = 3.14f;
-    static public final double TEST_DOUBLE = 2.71828;
-    static public final boolean TEST_BOOL = true;
-    static public final ByteString TEST_BYTES = ByteString.copyFrom(new byte[] {0x01, 0x02, 0x03, 0x04});
+
     static private final Map<String, String> TEST_STRING_MAP = new HashMap<>();
-    static private final String DEFAULT_PACKAGE = "org.apache.flink.formats.protobuf.proto";
-    static private final int DEFAULT_SCHEMA_ID = 1;
-    static private final String DEFAULT_CLASS_SUFFIX = "123";
 
     @BeforeEach
     public void setup() {
