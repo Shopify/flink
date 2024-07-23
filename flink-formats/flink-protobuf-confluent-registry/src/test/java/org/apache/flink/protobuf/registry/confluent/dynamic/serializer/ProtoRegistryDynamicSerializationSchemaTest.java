@@ -30,6 +30,8 @@ import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
+import org.apache.flink.table.data.ArrayData;
+import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.MapData;
@@ -37,7 +39,12 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.data.binary.BinaryStringData;
+import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.BinaryType;
+import org.apache.flink.table.types.logical.BooleanType;
+import org.apache.flink.table.types.logical.DoubleType;
+import org.apache.flink.table.types.logical.FloatType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
@@ -67,37 +74,111 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
     }
 
     @Test
-    public void testSerializePrimitiveTypes() throws Exception {
+    public void serializePrimitiveTypes() throws Exception {
         RowType rowType = TestUtils.createRowType(
                 new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
-                new RowType.RowField(TestUtils.INT_FIELD, new IntType())
+                new RowType.RowField(TestUtils.INT_FIELD, new IntType()),
+                new RowType.RowField(TestUtils.LONG_FIELD, new BigIntType()),
+                new RowType.RowField(TestUtils.FLOAT_FIELD, new FloatType()),
+                new RowType.RowField(TestUtils.DOUBLE_FIELD, new DoubleType()),
+                new RowType.RowField(TestUtils.BOOL_FIELD, new BooleanType()),
+                new RowType.RowField(TestUtils.BYTES_FIELD, new BinaryType())
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
                 TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
-        GenericRowData rowData = new GenericRowData(2);
+        GenericRowData rowData = new GenericRowData(7);
         rowData.setField(0, StringData.fromString(TestUtils.TEST_STRING));
         rowData.setField(1, TestUtils.TEST_INT);
+        rowData.setField(2, TestUtils.TEST_LONG);
+        rowData.setField(3, TestUtils.TEST_FLOAT);
+        rowData.setField(4, TestUtils.TEST_DOUBLE);
+        rowData.setField(5, true);
+        rowData.setField(6, TestUtils.TEST_BYTES.toByteArray());
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
         Message message = parseBytesToMessage(actualBytes);
         Descriptors.FieldDescriptor stringField = message.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
         Descriptors.FieldDescriptor intField = message.getDescriptorForType().findFieldByName(TestUtils.INT_FIELD);
+        Descriptors.FieldDescriptor longField = message.getDescriptorForType().findFieldByName(TestUtils.LONG_FIELD);
+        Descriptors.FieldDescriptor floatField = message.getDescriptorForType().findFieldByName(TestUtils.FLOAT_FIELD);
+        Descriptors.FieldDescriptor doubleField = message.getDescriptorForType().findFieldByName(TestUtils.DOUBLE_FIELD);
+        Descriptors.FieldDescriptor boolField = message.getDescriptorForType().findFieldByName(TestUtils.BOOL_FIELD);
+        Descriptors.FieldDescriptor bytesField = message.getDescriptorForType().findFieldByName(TestUtils.BYTES_FIELD);
 
         Assertions.assertEquals(TestUtils.TEST_STRING, message.getField(stringField));
         Assertions.assertEquals(TestUtils.TEST_INT, message.getField(intField));
+        Assertions.assertEquals(TestUtils.TEST_LONG, message.getField(longField));
+        Assertions.assertEquals(TestUtils.TEST_FLOAT, message.getField(floatField));
+        Assertions.assertEquals(TestUtils.TEST_DOUBLE, message.getField(doubleField));
+        Assertions.assertEquals(true, message.getField(boolField));
+        Assertions.assertEquals(TestUtils.TEST_BYTES, message.getField(bytesField));
 
     }
 
     @Test
-    public void testSerializeMap() throws Exception {
+    public void serializeNestedRow() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.NESTED_FIELD, TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                        new RowType.RowField(TestUtils.INT_FIELD, new IntType())
+                ))
+        );
+
+        ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+        protoRegistryDynamicSerializationSchema.open(null);
+
+        GenericRowData nestedRow = new GenericRowData(2);
+        nestedRow.setField(0, StringData.fromString(TestUtils.TEST_STRING));
+        nestedRow.setField(1, TestUtils.TEST_INT);
+
+        GenericRowData rowData = new GenericRowData(1);
+        rowData.setField(0, nestedRow);
+
+        byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
+
+        Message message = parseBytesToMessage(actualBytes);
+        Descriptors.FieldDescriptor nestedField = message.getDescriptorForType().findFieldByName(TestUtils.NESTED_FIELD);
+        DynamicMessage nestedMessage = (DynamicMessage) message.getField(nestedField);
+        Descriptors.FieldDescriptor stringField = nestedMessage.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
+        Descriptors.FieldDescriptor intField = nestedMessage.getDescriptorForType().findFieldByName(TestUtils.INT_FIELD);
+
+        Assertions.assertEquals(TestUtils.TEST_STRING, nestedMessage.getField(stringField));
+        Assertions.assertEquals(TestUtils.TEST_INT, nestedMessage.getField(intField));
+    }
+
+    @Test
+    public void serializeArray() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.ARRAY_FIELD, new ArrayType(new VarCharType()))
+        );
+
+        ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
+                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+        protoRegistryDynamicSerializationSchema.open(null);
+
+        GenericRowData rowData = new GenericRowData(1);
+        StringData[] arrayData = new StringData[]{StringData.fromString("a"), StringData.fromString("b")};
+        rowData.setField(0, new GenericArrayData(arrayData));
+
+        byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
+
+        Message message = parseBytesToMessage(actualBytes);
+        Descriptors.FieldDescriptor arrayField = message.getDescriptorForType().findFieldByName(TestUtils.ARRAY_FIELD);
+
+        Assertions.assertArrayEquals(new String[]{"a", "b"}, ((List) message.getField(arrayField)).toArray());
+    }
+
+    @Test
+    public void serializeMap() throws Exception {
         String otherMapField = "other_m_a_p"; // Exercises the camel case logic
         String nestedMapField = "nested_map";
 
         RowType nestedMapValueType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                new RowType.RowField(TestUtils.ARRAY_FIELD, new ArrayType(new VarCharType())),
                 new RowType.RowField(TestUtils.INT_FIELD, new IntType())
         );
 
@@ -118,7 +199,8 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         Map<StringData, RowData> nestedMapContent = new HashMap<>();
         GenericRowData nestedMapValue = new GenericRowData(2);
-        nestedMapValue.setField(0, StringData.fromString(TestUtils.TEST_STRING));
+        StringData[] arrayData = new StringData[]{StringData.fromString("a"), StringData.fromString("b")};
+        nestedMapValue.setField(0, new GenericArrayData(arrayData));
         nestedMapValue.setField(1, TestUtils.TEST_INT);
         nestedMapContent.put(StringData.fromString(TestUtils.TEST_STRING), nestedMapValue);
         rowData.setField(2, new GenericMapData(nestedMapContent));
@@ -147,8 +229,10 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         DynamicMessage nestedMapMessage = (DynamicMessage) ((List) message.getField(nestedMapMessageField)).get(0);
         Descriptors.FieldDescriptor nestedMapValueField = nestedMapMessage.getDescriptorForType().findFieldByName("value");
         DynamicMessage nestedMapValueMessage = (DynamicMessage) nestedMapMessage.getField(nestedMapValueField);
+        Descriptors.FieldDescriptor nestedMapValueArrayField = nestedMapValueField.getMessageType().findFieldByName(TestUtils.ARRAY_FIELD);
         Descriptors.FieldDescriptor nestedMapValueIntField = nestedMapValueField.getMessageType().findFieldByName(TestUtils.INT_FIELD);
 
+        Assertions.assertArrayEquals(new String[]{"a", "b"}, ((List) nestedMapValueMessage.getField(nestedMapValueArrayField)).toArray());
         Assertions.assertEquals(TestUtils.TEST_INT, nestedMapValueMessage.getField(nestedMapValueIntField));
 
     }
@@ -184,20 +268,6 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 //        );
 //
 //    }
-
-    private static String sharedSchemaComponents() {
-        return "syntax = \"proto3\";\n" +
-                "package " + TestUtils.DEFAULT_PACKAGE + ";\n" +
-                "option java_package = \"org.apache.flink.formats.protobuf.proto\";\n" +
-                "option java_outer_classname = \"TestClass_OuterClass\";\n" +
-                "option java_multiple_files = false;" +
-                "import \"google/protobuf/timestamp.proto\";" +
-                "message " + TestUtils.DEFAULT_CLASS_NAME + "{\n";
-    }
-
-    private ProtobufSchema getRegisteredSchema() throws Exception {
-        return (ProtobufSchema) mockSchemaRegistryClient.getSchemas(SUBJECT_NAME, false, true).get(0);
-    }
 
     private Message parseBytesToMessage(byte[] bytes) throws Exception {
         Map<String, String> opts = new HashMap<>();
