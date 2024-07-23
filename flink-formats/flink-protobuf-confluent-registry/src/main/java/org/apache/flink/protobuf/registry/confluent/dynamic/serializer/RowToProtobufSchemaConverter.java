@@ -25,6 +25,8 @@ import com.google.protobuf.DescriptorProtos.FieldDescriptorProto.Type;
 import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 
+import org.apache.commons.text.CaseUtils;
+
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
@@ -34,6 +36,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class RowToProtobufSchemaConverter {
+    private final static String NESTED_MESSAGE_SUFFIX = "Message";
+    private final static String MAP_ENTRY_SUFFIX = "Entry";
+
     private final String packageName;
     private final String className;
     private final RowType rowType;
@@ -73,73 +78,54 @@ public class RowToProtobufSchemaConverter {
         return new ProtobufSchema(fileDescriptor);
     }
 
-    private void recurseRowType(RowType rowType, DescriptorProtos.DescriptorProto.Builder currentBuilder) {
+    /**
+     * Recursively traverse a RowType and convert its fields to proto message fields.
+     */
+    private static void recurseRowType(RowType rowType, DescriptorProtos.DescriptorProto.Builder currentBuilder) {
 
         List<RowType.RowField> fields = rowType.getFields();
         for (int i = 0; i < fields.size(); i++) {
+
             RowType.RowField field = fields.get(i);
             DescriptorProtos.FieldDescriptorProto.Builder fieldDescriptorProtoBuilder = DescriptorProtos.FieldDescriptorProto.newBuilder();
             fieldDescriptorProtoBuilder.setName(field.getName());
             fieldDescriptorProtoBuilder.setNumber(i + 1);
-            if (field.getType() instanceof RowType) {
-                DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
-                String nestedTypeName = nestedClassName(field.getName());
-                newBuilder.setName(nestedTypeName);
-                recurseRowType((RowType) field.getType(), newBuilder);
-                currentBuilder.addNestedType(newBuilder);
 
+            if (field.getType() instanceof RowType) {
+
+                String nestedTypeName = addFlinkRowTypeToDescriptor(field, (RowType) field.getType(), currentBuilder);
                 fieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
                 fieldDescriptorProtoBuilder.setTypeName(nestedTypeName);
 
             } else if (field.getType() instanceof ArrayType) {
-                if (((ArrayType) field.getType()).getElementType() instanceof RowType) {
-                    DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
-                    String nestedTypeName = nestedClassName(field.getName());
-                    newBuilder.setName(nestedTypeName);
-                    recurseRowType(
-                            (RowType) ((ArrayType) field.getType()).getElementType(),
-                            newBuilder);
-                    currentBuilder.addNestedType(newBuilder);
 
+                if (((ArrayType) field.getType()).getElementType() instanceof RowType) {
+                    String nestedTypeName = addFlinkRowTypeToDescriptor(field, (RowType) ((ArrayType) field.getType()).getElementType(), currentBuilder);
                     fieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
                     fieldDescriptorProtoBuilder.setTypeName(nestedTypeName);
                 } else {
-                    setProtoField(fieldDescriptorProtoBuilder, ((ArrayType) field.getType()).getElementType());
+                    addPrimitiveFlinkFieldToDescriptor(fieldDescriptorProtoBuilder, ((ArrayType) field.getType()).getElementType());
                 }
+
                 fieldDescriptorProtoBuilder.setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED);
+
             } else if (field.getType() instanceof MapType) {
-                List<RowType.RowField> mapFields = new ArrayList<>();
-                mapFields.add(new RowType.RowField(
-                        "key",
-                        ((MapType) field.getType()).getKeyType()));
-                mapFields.add(new RowType.RowField(
-                        "value",
-                        ((MapType) field.getType()).getValueType()));
 
-                DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
-                String nestedTypeName = nestedClassName(field.getName());
-                newBuilder.setName(nestedTypeName);
-                recurseRowType(new RowType(mapFields), newBuilder);
-                newBuilder.setOptions(DescriptorProtos.MessageOptions.newBuilder().setMapEntry(true).build());
-
-                currentBuilder.addNestedType(newBuilder);
-
+                String nestedTypeName = addFlinkMapTypeToDescriptor(field, (MapType) field.getType(), currentBuilder);
                 fieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
                 fieldDescriptorProtoBuilder.setTypeName(nestedTypeName);
                 fieldDescriptorProtoBuilder.setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED);
+
             } else {
-                setProtoField(fieldDescriptorProtoBuilder, field.getType());
+                addPrimitiveFlinkFieldToDescriptor(fieldDescriptorProtoBuilder, field.getType());
             }
             currentBuilder.addField(fieldDescriptorProtoBuilder.build());
         }
 
     }
 
-    /**
-     * Set the type of a FieldDescriptorProto based on the logical type of the Flink field.
-     */
-    private static void setProtoField(DescriptorProtos.FieldDescriptorProto.Builder input,
-                                      LogicalType rowFieldType) {
+    private static void addPrimitiveFlinkFieldToDescriptor(DescriptorProtos.FieldDescriptorProto.Builder input,
+                                                           LogicalType rowFieldType) {
         switch (rowFieldType.getTypeRoot()) {
             case CHAR:
             case VARCHAR:
@@ -166,19 +152,70 @@ public class RowToProtobufSchemaConverter {
             case DOUBLE:
                 input.setType(Type.TYPE_DOUBLE);
                 return;
-            case DATE:
-            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-            case TIMESTAMP_WITH_TIME_ZONE:
-            case TIMESTAMP_WITHOUT_TIME_ZONE:
-                input.setType(Type.TYPE_MESSAGE);
-                input.setTypeName("google.protobuf.Timestamp");
-                return;
             default:
                 throw new IllegalArgumentException("Unsupported logical type: " + rowFieldType);
         }
     }
 
-    private String nestedClassName(String originalFieldName) {
-        return originalFieldName + "Class";
+    private static String addFlinkRowTypeToDescriptor(RowType.RowField field, RowType rowType, DescriptorProtos.DescriptorProto.Builder currentBuilder) {
+        String nestedTypeName = field.getName() + NESTED_MESSAGE_SUFFIX;
+
+        DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+        newBuilder.setName(nestedTypeName);
+        recurseRowType(rowType, newBuilder);
+        currentBuilder.addNestedType(newBuilder);
+        return nestedTypeName;
+    }
+
+    private static String addFlinkMapTypeToDescriptor(RowType.RowField field, MapType mapType, DescriptorProtos.DescriptorProto.Builder currentBuilder) {
+
+        DescriptorProtos.FieldDescriptorProto.Builder keyFieldDescriptorProtoBuilder = DescriptorProtos.FieldDescriptorProto.newBuilder();
+        keyFieldDescriptorProtoBuilder.setName("key");
+        keyFieldDescriptorProtoBuilder.setNumber(1);
+
+        if (mapType.getKeyType() instanceof RowType) {
+            DescriptorProtos.DescriptorProto.Builder keyMessageProtoBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+            recurseRowType((RowType) mapType.getKeyType(), currentBuilder);
+            String keyTypeName = field.getName() + "Key" + NESTED_MESSAGE_SUFFIX;
+            keyMessageProtoBuilder.setName(keyTypeName);
+            currentBuilder.addNestedType(keyMessageProtoBuilder);
+
+            keyFieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
+            keyFieldDescriptorProtoBuilder.setTypeName(keyTypeName);
+        } else {
+            addPrimitiveFlinkFieldToDescriptor(keyFieldDescriptorProtoBuilder, mapType.getKeyType());
+        }
+
+        DescriptorProtos.FieldDescriptorProto.Builder valueFieldDescriptorProtoBuilder = DescriptorProtos.FieldDescriptorProto.newBuilder();
+        valueFieldDescriptorProtoBuilder.setName("value");
+        valueFieldDescriptorProtoBuilder.setNumber(2);
+
+        if (mapType.getValueType() instanceof RowType) {
+            DescriptorProtos.DescriptorProto.Builder valueMessageProtoBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+            recurseRowType((RowType) mapType.getValueType(), valueMessageProtoBuilder);
+            String valueTypeName = field.getName() + "Value" + NESTED_MESSAGE_SUFFIX;
+            valueMessageProtoBuilder.setName(valueTypeName);
+            currentBuilder.addNestedType(valueMessageProtoBuilder);
+
+            valueFieldDescriptorProtoBuilder.setType(Type.TYPE_MESSAGE);
+            valueFieldDescriptorProtoBuilder.setTypeName(valueTypeName);
+        } else {
+            addPrimitiveFlinkFieldToDescriptor(valueFieldDescriptorProtoBuilder, mapType.getValueType());
+        }
+
+        DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
+
+        // This is a very obscure part of the protobuf format. If the type isn't called fieldName + "Entry",
+        // the proto compiler won't be able to parse the definition.
+        String camelCasedFieldName = CaseUtils.toCamelCase(field.getName(), true, '_');
+        String nestedTypeName = camelCasedFieldName + MAP_ENTRY_SUFFIX;
+        newBuilder.setName(nestedTypeName);
+
+        newBuilder.addField(keyFieldDescriptorProtoBuilder.build());
+        newBuilder.addField(valueFieldDescriptorProtoBuilder.build());
+        newBuilder.setOptions(DescriptorProtos.MessageOptions.newBuilder().setMapEntry(true).build());
+
+        currentBuilder.addNestedType(newBuilder);
+        return nestedTypeName;
     }
 }

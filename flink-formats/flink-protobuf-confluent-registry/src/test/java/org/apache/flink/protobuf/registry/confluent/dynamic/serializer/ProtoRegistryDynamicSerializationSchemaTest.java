@@ -19,6 +19,8 @@
 package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 
 import com.google.protobuf.Descriptors;
+import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.MapEntry;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
@@ -31,8 +33,10 @@ import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.MapData;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.data.TimestampData;
+import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.MapType;
@@ -45,7 +49,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ProtoRegistryDynamicSerializationSchemaTest {
@@ -86,24 +93,63 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
     @Test
     public void testSerializeMap() throws Exception {
+        String otherMapField = "other_m_a_p"; // Exercises the camel case logic
+        String nestedMapField = "nested_map";
+
+        RowType nestedMapValueType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                new RowType.RowField(TestUtils.INT_FIELD, new IntType())
+        );
+
         RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.MAP_FIELD, new MapType(new VarCharType(), new IntType()))
+                new RowType.RowField(TestUtils.MAP_FIELD, new MapType(new VarCharType(), new IntType())),
+                new RowType.RowField(otherMapField, new MapType(new VarCharType(), new IntType())),
+                new RowType.RowField(nestedMapField, new MapType(new VarCharType(), nestedMapValueType))
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
                 TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
-        GenericRowData rowData = new GenericRowData(1);
-        Map<String, Integer> mapContent = new HashMap<>();
-        mapContent.put(TestUtils.TEST_STRING, TestUtils.TEST_INT);
+        GenericRowData rowData = new GenericRowData(3);
+        Map<StringData, Integer> mapContent = new HashMap<>();
+        mapContent.put(StringData.fromString(TestUtils.TEST_STRING), TestUtils.TEST_INT);
         rowData.setField(0, new GenericMapData(mapContent));
+        rowData.setField(1, new GenericMapData(mapContent));
+
+        Map<StringData, RowData> nestedMapContent = new HashMap<>();
+        GenericRowData nestedMapValue = new GenericRowData(2);
+        nestedMapValue.setField(0, StringData.fromString(TestUtils.TEST_STRING));
+        nestedMapValue.setField(1, TestUtils.TEST_INT);
+        nestedMapContent.put(StringData.fromString(TestUtils.TEST_STRING), nestedMapValue);
+        rowData.setField(2, new GenericMapData(nestedMapContent));
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
         Message message = parseBytesToMessage(actualBytes);
-        Descriptors.FieldDescriptor mapField = message.getDescriptorForType().findFieldByName(TestUtils.MAP_FIELD);
 
-        Assertions.assertEquals(mapContent, message.getField(mapField));
+        Descriptors.FieldDescriptor mapMessageField = message.getDescriptorForType().findFieldByName(TestUtils.MAP_FIELD);
+        DynamicMessage mapMessage = (DynamicMessage) ((List) message.getField(mapMessageField)).get(0);
+        Descriptors.FieldDescriptor mapKeyField = mapMessage.getDescriptorForType().findFieldByName("key");
+        Descriptors.FieldDescriptor mapValueField = mapMessage.getDescriptorForType().findFieldByName("value");
+
+        Assertions.assertEquals(TestUtils.TEST_STRING, mapMessage.getField(mapKeyField));
+        Assertions.assertEquals(TestUtils.TEST_INT, mapMessage.getField(mapValueField));
+
+        Descriptors.FieldDescriptor otherMapMessageField = message.getDescriptorForType().findFieldByName(otherMapField);
+        DynamicMessage otherMapMessage = (DynamicMessage) ((List) message.getField(otherMapMessageField)).get(0);
+        Descriptors.FieldDescriptor otherMapKeyField = otherMapMessage.getDescriptorForType().findFieldByName("key");
+        Descriptors.FieldDescriptor otherMapValueField = otherMapMessage.getDescriptorForType().findFieldByName("value");
+
+        Assertions.assertEquals(TestUtils.TEST_STRING, otherMapMessage.getField(otherMapKeyField));
+        Assertions.assertEquals(TestUtils.TEST_INT, otherMapMessage.getField(otherMapValueField));
+
+        Descriptors.FieldDescriptor nestedMapMessageField = message.getDescriptorForType().findFieldByName(nestedMapField);
+        DynamicMessage nestedMapMessage = (DynamicMessage) ((List) message.getField(nestedMapMessageField)).get(0);
+        Descriptors.FieldDescriptor nestedMapValueField = nestedMapMessage.getDescriptorForType().findFieldByName("value");
+        DynamicMessage nestedMapValueMessage = (DynamicMessage) nestedMapMessage.getField(nestedMapValueField);
+        Descriptors.FieldDescriptor nestedMapValueIntField = nestedMapValueField.getMessageType().findFieldByName(TestUtils.INT_FIELD);
+
+        Assertions.assertEquals(TestUtils.TEST_INT, nestedMapValueMessage.getField(nestedMapValueIntField));
 
     }
 

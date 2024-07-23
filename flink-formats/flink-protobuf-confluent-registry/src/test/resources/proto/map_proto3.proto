@@ -21,4 +21,10 @@ package org.apache.flink.formats.protobuf.proto;
 
 message Proto3Map {
   map<string, string> map = 1;
+  map<string, Nested> nested = 2;
+
+  message Nested {
+    double double = 1;
+    float float = 2;
+  }
 }
