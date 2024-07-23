@@ -19,8 +19,11 @@
 package org.apache.flink.protobuf.registry.confluent.dynamic.deserializer;
 
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.rest.entities.SchemaReference;
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
 
+import org.apache.flink.formats.protobuf.proto.AddressAndUser;
 import org.apache.flink.formats.protobuf.proto.FlatProto3OuterClass;
 
 import org.apache.flink.formats.protobuf.proto.MapProto3;
@@ -46,6 +49,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -239,6 +243,52 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         timestampValue.setField(0, TestUtils.TEST_LONG);
         timestampValue.setField(1, TestUtils.TEST_INT);
         Assertions.assertEquals(timestampValue, actual.getRow(0, 2));
+    }
+
+    @Test
+    public void deserializeUsingSchemaWithReferences() throws Exception {
+
+        ProtobufSchema addressSchema = new ProtobufSchema(AddressAndUser.AddressProto.getDescriptor());
+        mockSchemaRegistryClient.register("Address", addressSchema);
+
+        // Register the User schema
+        SchemaReference schemaReference = new SchemaReference("Address", "Address", null);
+        ProtobufSchema userSchema = new ProtobufSchema(AddressAndUser.UserProto.getDescriptor(), Arrays.asList(schemaReference));
+        mockSchemaRegistryClient.register("User", userSchema);
+
+        Assertions.assertFalse(
+                mockSchemaRegistryClient.getLatestSchemaMetadata("User").getReferences().isEmpty(),
+                "User schema should have references"
+        );
+
+        AddressAndUser.UserProto in = AddressAndUser.UserProto.newBuilder()
+                .setName(TestUtils.TEST_STRING)
+                .setAddress(AddressAndUser.AddressProto.newBuilder()
+                        .setStreet(TestUtils.TEST_STRING)
+                        .setCity(TestUtils.TEST_STRING)
+                        .build()
+                )
+                .build();
+
+        byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
+
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField("name", new VarCharType()),
+                new RowType.RowField("address", TestUtils.createRowType(
+                        new RowType.RowField("street", new VarCharType()),
+                        new RowType.RowField("city", new VarCharType())
+                ))
+        );
+        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
+                mockSchemaRegistryClient, rowType, null, formatConfig
+        );
+        deser.open(null);
+
+        RowData actual = deser.deserialize(inBytes);
+        Assertions.assertEquals(2, actual.getArity());
+        Assertions.assertEquals(TestUtils.TEST_STRING, actual.getString(0).toString());
+        Assertions.assertEquals(TestUtils.TEST_STRING, actual.getRow(1, 2).getString(0).toString());
+        Assertions.assertEquals(TestUtils.TEST_STRING, actual.getRow(1, 2).getString(1).toString());
     }
 
 }
