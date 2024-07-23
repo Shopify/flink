@@ -23,10 +23,14 @@ import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
 
 import org.apache.flink.formats.protobuf.proto.FlatProto3OuterClass;
 
+import org.apache.flink.formats.protobuf.proto.MapProto3;
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
+import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.IntType;
+import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.apache.flink.table.types.logical.VarCharType;
@@ -89,6 +93,31 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         Assertions.assertEquals(TestUtils.TEST_STRING, actual.getString(0).toString());
         Assertions.assertEquals(TestUtils.TEST_INT, actual.getInt(1));
         Assertions.assertEquals(TestUtils.TEST_LONG, actual.getLong(2));
+    }
+
+    @Test
+    public void mapDeserializerTest() throws Exception {
+        MapProto3.Proto3Map in = MapProto3.Proto3Map.newBuilder()
+                .putMap(TestUtils.TEST_STRING, TestUtils.TEST_STRING)
+                .build();
+
+        byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
+
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.MAP_FIELD, new MapType(new VarCharType(), new VarCharType()))
+        );
+
+        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
+                mockSchemaRegistryClient, rowType, null, formatConfig
+        );
+        deser.open(null);
+
+        RowData actual = deser.deserialize(inBytes);
+        Assertions.assertEquals(1, actual.getArity());
+        Map<BinaryStringData, BinaryStringData> expectedMap = new HashMap<>();
+        BinaryStringData binaryString = BinaryStringData.fromString(TestUtils.TEST_STRING);
+        expectedMap.put(binaryString, binaryString);
+        Assertions.assertEquals(new GenericMapData(expectedMap), actual.getMap(0));
     }
 
 //    @Test
