@@ -53,10 +53,12 @@ public class ProtoRegistryDynamicDeserializationSchema implements Deserializatio
 
     private final RowType rowType;
     private final TypeInformation<RowData> resultTypeInfo;
-    private final ProtoRegistryDynamicDeserializerFormatConfig formatConfig;
 
     private final SchemaRegistryClient schemaRegistryClient;
     private final Map<Integer, KafkaProtobufDeserializer> kafkaProtobufDeserializers;
+    private final boolean ignoreParseErrors;
+    private final boolean readDefaultValues;
+    private final String schemaRegistryUrl;
 
     // Since these services operate on dynamically compiled and loaded classes, we need to
     // assume that the new worker don't have the classes loaded yet.
@@ -68,14 +70,17 @@ public class ProtoRegistryDynamicDeserializationSchema implements Deserializatio
 
     public ProtoRegistryDynamicDeserializationSchema(
             SchemaRegistryClient schemaRegistryClient,
+            String schemaRegistryUrl,
             RowType rowType,
             TypeInformation<RowData> resultTypeInfo,
-            ProtoRegistryDynamicDeserializerFormatConfig formatConfig) {
+            boolean ignoreParseErrors,
+            boolean readDefaultValues) {
         this.rowType = rowType;
         this.resultTypeInfo = resultTypeInfo;
-        this.formatConfig = formatConfig;
-
+        this.ignoreParseErrors = ignoreParseErrors;
+        this.readDefaultValues = readDefaultValues;
         this.schemaRegistryClient = schemaRegistryClient;
+        this.schemaRegistryUrl = schemaRegistryUrl;
         this.kafkaProtobufDeserializers = new HashMap<>();
     }
 
@@ -89,7 +94,7 @@ public class ProtoRegistryDynamicDeserializationSchema implements Deserializatio
         try {
             return protoToRowConverter.convertProtoObjectToRow(protoMessage);
         } catch (Exception e) {
-            if (formatConfig.isIgnoreParseErrors()) {
+            if (ignoreParseErrors) {
                 return null;
             }
             throw new IOException("Failed to deserialize Protobuf message", e);
@@ -142,7 +147,7 @@ public class ProtoRegistryDynamicDeserializationSchema implements Deserializatio
     private KafkaProtobufDeserializer getOrCreateKafkaProtobufDeserializer(int schemaId) {
         if (!kafkaProtobufDeserializers.containsKey(schemaId)) {
             Map<String, String> config = new HashMap<>();
-            config.put("schema.registry.url", formatConfig.getSchemaRegistryUrl());
+            config.put("schema.registry.url", schemaRegistryUrl);
             Class messageClass = generatedMessageClasses.get(schemaId);
             KafkaProtobufDeserializer deserializer = new KafkaProtobufDeserializer(schemaRegistryClient, config, messageClass);
             kafkaProtobufDeserializers.put(schemaId, deserializer);
@@ -158,7 +163,7 @@ public class ProtoRegistryDynamicDeserializationSchema implements Deserializatio
         ProtobufSchema protobufSchema = getProtobufSchema(schemaId);
         Class messageClass = protoCompiler.generateMessageClass(protobufSchema, schemaId);
         generatedMessageClasses.put(schemaId, messageClass);
-        PbFormatConfig pbFormatConfig = formatConfig.toPbFormatConfig(messageClass.getName());
+        PbFormatConfig pbFormatConfig = new PbFormatConfig(messageClass.getName(), ignoreParseErrors, readDefaultValues, null);
         try {
             ProtoToRowConverter protoToRowConverter = new ProtoToRowConverter(
                     rowType,

@@ -58,9 +58,10 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
 
     private MockSchemaRegistryClient mockSchemaRegistryClient;
     private KafkaProtobufSerializer kafkaProtobufSerializer;
-    private ProtoRegistryDynamicDeserializerFormatConfig formatConfig;
     private static final String DUMMY_SCHEMA_REGISTRY_URL = "http://registry:8081";
     public static final String FAKE_TOPIC = "fake-topic";
+    private static final boolean IGNORE_PARSE_ERRORS = false;
+    private static final boolean READ_DEFAULT_VALUES = false;
 
     @BeforeEach
     public void setup() {
@@ -68,7 +69,6 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         Map<String, String> opts = new HashMap<>();
         opts.put("schema.registry.url", DUMMY_SCHEMA_REGISTRY_URL);
         kafkaProtobufSerializer = new KafkaProtobufSerializer(mockSchemaRegistryClient, opts);
-        formatConfig = new ProtoRegistryDynamicDeserializerFormatConfig(DUMMY_SCHEMA_REGISTRY_URL, false, false);
     }
 
     @Test
@@ -94,7 +94,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         RowType rowType = new RowType(fields);
 
         ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, rowType, null, formatConfig
+                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
         );
         deser.open(null);
 
@@ -130,7 +130,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         );
 
         ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, rowType, null, formatConfig
+                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
         );
         deser.open(null);
 
@@ -160,7 +160,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         );
 
         ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, rowType, null, formatConfig
+                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
         );
         deser.open(null);
 
@@ -193,7 +193,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         );
 
         ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, rowType, null, formatConfig
+                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
         );
         deser.open(null);
 
@@ -232,7 +232,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         );
 
         ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, rowType, null, formatConfig
+                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
         );
         deser.open(null);
 
@@ -280,7 +280,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
                 ))
         );
         ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, rowType, null, formatConfig
+                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
         );
         deser.open(null);
 
