@@ -28,13 +28,17 @@ import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 import org.apache.commons.text.CaseUtils;
 
 import org.apache.flink.table.types.logical.ArrayType;
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.LogicalType;
 
-import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Converts a Flink {@link RowType} to a {@link ProtobufSchema}.
+ * The generated schema can be used to serialize Flink RowData to Protobuf.
+ */
 public class RowToProtobufSchemaConverter {
     private final static String NESTED_MESSAGE_SUFFIX = "Message";
     private final static String MAP_ENTRY_SUFFIX = "Entry";
@@ -158,6 +162,11 @@ public class RowToProtobufSchemaConverter {
     }
 
     private static String addFlinkRowTypeToDescriptor(RowType.RowField field, RowType rowType, DescriptorProtos.DescriptorProto.Builder currentBuilder) {
+
+        if (isTimestampType(rowType)) {
+            return "google.protobuf.Timestamp";
+        }
+
         String nestedTypeName = field.getName() + NESTED_MESSAGE_SUFFIX;
 
         DescriptorProtos.DescriptorProto.Builder newBuilder = DescriptorProtos.DescriptorProto.newBuilder();
@@ -217,5 +226,14 @@ public class RowToProtobufSchemaConverter {
 
         currentBuilder.addNestedType(newBuilder);
         return nestedTypeName;
+    }
+
+    // Auto-detect rows that should be represented as proto timestamps
+    private static boolean isTimestampType(RowType rowType) {
+        return rowType.getFields().size() == 2 &&
+                rowType.getFields().get(0).getName().equals("seconds") &&
+                rowType.getFields().get(1).getName().equals("nanos") &&
+                rowType.getFields().get(0).getType().getTypeRoot().equals(LogicalTypeRoot.BIGINT) &&
+                rowType.getFields().get(1).getType().getTypeRoot().equals(LogicalTypeRoot.INTEGER);
     }
 }

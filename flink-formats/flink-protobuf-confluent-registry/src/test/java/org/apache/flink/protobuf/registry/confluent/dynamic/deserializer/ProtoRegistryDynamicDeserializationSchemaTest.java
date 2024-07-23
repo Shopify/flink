@@ -25,11 +25,13 @@ import org.apache.flink.formats.protobuf.proto.FlatProto3OuterClass;
 
 import org.apache.flink.formats.protobuf.proto.MapProto3;
 import org.apache.flink.formats.protobuf.proto.NestedProto3OuterClass;
+import org.apache.flink.formats.protobuf.proto.TimestampProto3OuterClass;
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.BinaryStringData;
+import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
@@ -66,7 +68,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
     }
 
     @Test
-    public void deserializerTest() throws Exception {
+    public void deserializePrimitives() throws Exception {
         FlatProto3OuterClass.FlatProto3 in = FlatProto3OuterClass.FlatProto3.newBuilder()
                 .setString(TestUtils.TEST_STRING)
                 .setInt(TestUtils.TEST_INT)
@@ -100,7 +102,7 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
     }
 
     @Test
-    public void nestedDeserializerTest() throws Exception {
+    public void deserializeNestedRow() throws Exception {
         NestedProto3OuterClass.NestedProto3 in = NestedProto3OuterClass.NestedProto3.newBuilder()
                 .setString(TestUtils.TEST_STRING)
                 .setInt(TestUtils.TEST_INT)
@@ -141,7 +143,32 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
     }
 
     @Test
-    public void mapDeserializerTest() throws Exception {
+    public void deserializeArray() throws Exception {
+        FlatProto3OuterClass.FlatProto3 in = FlatProto3OuterClass.FlatProto3.newBuilder()
+                .addInts(TestUtils.TEST_INT)
+                .addInts(TestUtils.TEST_INT * 2)
+                .build();
+
+        byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
+
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField("ints", new ArrayType(new IntType()))
+        );
+
+        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
+                mockSchemaRegistryClient, rowType, null, formatConfig
+        );
+        deser.open(null);
+
+        RowData actual = deser.deserialize(inBytes);
+        Assertions.assertEquals(1, actual.getArity());
+        Assertions.assertEquals(TestUtils.TEST_INT, actual.getArray(0).getInt(0));
+        Assertions.assertEquals(TestUtils.TEST_INT * 2, actual.getArray(0).getInt(1));
+
+    }
+
+    @Test
+    public void deserializeMap() throws Exception {
         MapProto3.Proto3Map in = MapProto3.Proto3Map.newBuilder()
                 .putMap(TestUtils.TEST_STRING, TestUtils.TEST_STRING)
                 .putNested(TestUtils.TEST_STRING, MapProto3.Proto3Map.Nested.newBuilder()
@@ -181,29 +208,37 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
 
     }
 
-//    @Test
-//    public void googleTypeDeserializerTest() throws Exception {
-//        TimestampProto3OuterClass.TimestampProto3 in = TimestampProto3OuterClass.TimestampProto3.newBuilder()
-//                .setTs(
-//                        com.google.protobuf.Timestamp.newBuilder()
-//                                .setSeconds(123)
-//                                .setNanos(0)
-//                                .build()
-//                )
-//                .build();
-//        byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
-//
-//        RowType rowType = TestUtils.createRowType(
-//                new RowType.RowField("ts", new TimestampType())
-//        );
-//
-//        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-//                mockSchemaRegistryClient, rowType, null, formatConfig
-//        );
-//        deser.open(null);
-//
-//        RowData actual = deser.deserialize(inBytes);
-//        System.out.println(actual);
-//    }
+    @Test
+    public void deserializeTimestamp() throws Exception {
+        TimestampProto3OuterClass.TimestampProto3 in = TimestampProto3OuterClass.TimestampProto3.newBuilder()
+                .setTs(
+                        com.google.protobuf.Timestamp.newBuilder()
+                                .setSeconds(TestUtils.TEST_LONG)
+                                .setNanos(TestUtils.TEST_INT)
+                                .build()
+                )
+                .build();
+        byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
+
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.TIMESTAMP_FIELD, TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.SECONDS_FIELD, new BigIntType()),
+                        new RowType.RowField(TestUtils.NANOS_FIELD, new IntType())
+                ))
+        );
+
+        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
+                mockSchemaRegistryClient, rowType, null, formatConfig
+        );
+        deser.open(null);
+
+        RowData actual = deser.deserialize(inBytes);
+        Assertions.assertEquals(1, actual.getArity());
+
+        GenericRowData timestampValue = new GenericRowData(2);
+        timestampValue.setField(0, TestUtils.TEST_LONG);
+        timestampValue.setField(1, TestUtils.TEST_INT);
+        Assertions.assertEquals(timestampValue, actual.getRow(0, 2));
+    }
 
 }

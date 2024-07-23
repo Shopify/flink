@@ -76,7 +76,6 @@ public class ProtoRegistryDynamicSerializationSchema implements SerializationSch
         Class generatedClass = generateProtoClassForRowType();
         KafkaProtobufSerializer kafkaProtobufSerializer = createKafkaSerializer();
         MessageSerializer messageSerializer = new ConfluentMessageSerializer(kafkaProtobufSerializer, subjectName);
-        // TODO: use a real config here
         PbFormatConfig formatConfig = new PbFormatConfig(generatedClass.getName(), false, true, null);
         rowToProtoConverter = new RowToProtoConverter(rowType, formatConfig, messageSerializer);
     }
@@ -91,7 +90,7 @@ public class ProtoRegistryDynamicSerializationSchema implements SerializationSch
         return protoCompiler.generateMessageClass(protoSchema, null);
     }
 
-    private KafkaProtobufSerializer createKafkaSerializer() throws Exception {
+    private KafkaProtobufSerializer createKafkaSerializer() {
         Map<String, String> opts = new HashMap<>();
         opts.put("schema.registry.url", schemaRegistryUrl);
         opts.put("auto.register.schemas", "true");

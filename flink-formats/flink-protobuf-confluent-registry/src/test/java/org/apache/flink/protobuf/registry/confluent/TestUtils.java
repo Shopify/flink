@@ -46,6 +46,9 @@ public class TestUtils {
     public static final String NESTED_FIELD = "nested";
     public static final String ARRAY_FIELD = "array";
     public static final String MAP_FIELD = "map";
+    public static final String TIMESTAMP_FIELD = "ts";
+    public static final String SECONDS_FIELD = "seconds";
+    public static final String NANOS_FIELD = "nanos";
 
     static public final String DEFAULT_PACKAGE = "org.apache.flink.formats.protobuf.proto";
     static public final int DEFAULT_SCHEMA_ID = 1;

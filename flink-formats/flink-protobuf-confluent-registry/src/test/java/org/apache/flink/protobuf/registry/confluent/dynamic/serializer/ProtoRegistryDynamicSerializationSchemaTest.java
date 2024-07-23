@@ -61,16 +61,19 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class ProtoRegistryDynamicSerializationSchemaTest {
     private static final String SUBJECT_NAME = "testSubject";
     private static final String SCHEMA_REGISTRY_URL = "http://registry:8081";
 
     private MockSchemaRegistryClient mockSchemaRegistryClient;
+    private String className;
 
     @BeforeEach
     public void setup() {
         mockSchemaRegistryClient = new MockSchemaRegistryClient();
+        className = TestUtils.DEFAULT_CLASS_NAME + UUID.randomUUID().toString().replace("-", "");
     }
 
     @Test
@@ -85,7 +88,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 new RowType.RowField(TestUtils.BYTES_FIELD, new BinaryType())
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(7);
@@ -128,7 +131,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         );
 
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData nestedRow = new GenericRowData(2);
@@ -157,7 +160,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         );
 
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(1);
@@ -188,7 +191,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 new RowType.RowField(nestedMapField, new MapType(new VarCharType(), nestedMapValueType))
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(3);
@@ -237,37 +240,37 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
     }
 
-//    @Test
-//    public void testSerializeGoogleTypes() throws Exception {
-//        String tsField = "ts";
-//        RowType rowType = TestUtils.createRowType(
-//                new RowType.RowField(tsField, new TimestampType())
-//        );
-//        ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-//                TestUtils.DEFAULT_PACKAGE, TestUtils.DEFAULT_CLASS_NAME, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
-//        protoRegistryDynamicSerializationSchema.open(null);
-//
-//        GenericRowData rowData = new GenericRowData(1);
-//        rowData.setField(0, TimestampData.fromEpochMillis(123));
-//
-//        byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
-//
-//        ProtobufSchema actualRegisteredSchema = getRegisteredSchema();
-//        ProtobufSchema expectedSchema = new ProtobufSchema(
-//                sharedSchemaComponents() +
-//                        "  google.protobuf.Timestamp" + tsField + "= 1;\n" +
-//                        "}\n");
-//        Assertions.assertEquals(expectedSchema, actualRegisteredSchema);
-//
-//        Message message = parseBytesToMessage(actualBytes);
-//        Descriptors.FieldDescriptor tsFieldDescriptor = message.getDescriptorForType().findFieldByName(tsField);
-//
-//        Assertions.assertEquals(
-//                Timestamp.newBuilder().setSeconds(123).setNanos(456).build(),
-//                message.getField(tsFieldDescriptor)
-//        );
-//
-//    }
+    @Test
+    public void serializeTimestamp() throws Exception {
+        RowType rowType = TestUtils.createRowType(
+                new RowType.RowField(TestUtils.TIMESTAMP_FIELD, TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.SECONDS_FIELD, new BigIntType()),
+                        new RowType.RowField(TestUtils.NANOS_FIELD, new IntType())
+                ))
+        );
+        ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
+                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+        protoRegistryDynamicSerializationSchema.open(null);
+
+        GenericRowData nestedRow = new GenericRowData(2);
+        nestedRow.setField(0, TestUtils.TEST_LONG);
+        nestedRow.setField(1, TestUtils.TEST_INT);
+
+        GenericRowData rowData = new GenericRowData(1);
+        rowData.setField(0, nestedRow);
+
+        byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
+
+        Message message = parseBytesToMessage(actualBytes);
+        Descriptors.FieldDescriptor tsFieldDescriptor = message.getDescriptorForType().findFieldByName(TestUtils.TIMESTAMP_FIELD);
+        DynamicMessage tsMessage = (DynamicMessage) message.getField(tsFieldDescriptor);
+        Descriptors.FieldDescriptor secondsField = tsMessage.getDescriptorForType().findFieldByName(TestUtils.SECONDS_FIELD);
+        Descriptors.FieldDescriptor nanosField = tsMessage.getDescriptorForType().findFieldByName(TestUtils.NANOS_FIELD);
+
+        Assertions.assertEquals(TestUtils.TEST_LONG, tsMessage.getField(secondsField));
+        Assertions.assertEquals(TestUtils.TEST_INT, tsMessage.getField(nanosField));
+
+    }
 
     private Message parseBytesToMessage(byte[] bytes) throws Exception {
         Map<String, String> opts = new HashMap<>();
