@@ -24,10 +24,10 @@ import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 
-import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.formats.protobuf.PbFormatConfig;
 import org.apache.flink.formats.protobuf.deserialize.ProtoToRowConverter;
+import org.apache.flink.protobuf.registry.confluent.ProtobufConfluentDeserializationSchema;
 import org.apache.flink.protobuf.registry.confluent.dynamic.ProtoCompiler;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
@@ -49,9 +49,10 @@ import java.util.Map;
  * Therefore, for a number of services used by ProtoRegistryDeserializationSchema, we need to
  * maintain a map of schema ID -> service.
  */
-public class ProtoRegistryDynamicDeserializationSchema implements DeserializationSchema<RowData> {
+public class ProtoRegistryDynamicDeserializationSchema implements ProtobufConfluentDeserializationSchema {
+    private static final long serialVersionUID = 1L;
 
-    private final RowType rowType;
+    private RowType rowType;
     private final TypeInformation<RowData> resultTypeInfo;
 
     private final SchemaRegistryClient schemaRegistryClient;
@@ -120,6 +121,16 @@ public class ProtoRegistryDynamicDeserializationSchema implements Deserializatio
         protoToRowConverters = new HashMap<>();
         protoCompiler = new ProtoCompiler();
         generatedMessageClasses = new HashMap<>();
+    }
+
+    @Override
+    public void setRowType(RowType rowType) {
+        this.rowType = rowType;
+    }
+
+    @Override
+    public RowType getRowType() {
+        return this.rowType;
     }
 
     private int getSchemaIdFromMessage(byte[] message) {

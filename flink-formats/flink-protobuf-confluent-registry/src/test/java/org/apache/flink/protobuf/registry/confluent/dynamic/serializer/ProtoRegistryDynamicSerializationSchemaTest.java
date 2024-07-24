@@ -20,25 +20,18 @@ package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
-import com.google.protobuf.MapEntry;
 import com.google.protobuf.Message;
-import com.google.protobuf.Timestamp;
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
 
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
-
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
-import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
-import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
-import org.apache.flink.table.data.TimestampData;
-import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BinaryType;
@@ -49,23 +42,22 @@ import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
 
-import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.VarCharType;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.DUMMY_SCHEMA_REGISTRY_URL;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.FAKE_SUBJECT;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.parseBytesToMessage;
+
 public class ProtoRegistryDynamicSerializationSchemaTest {
-    private static final String SUBJECT_NAME = "testSubject";
-    private static final String SCHEMA_REGISTRY_URL = "http://registry:8081";
 
     private MockSchemaRegistryClient mockSchemaRegistryClient;
     private String className;
@@ -88,7 +80,9 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 new RowType.RowField(TestUtils.BYTES_FIELD, new BinaryType())
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType,
+                FAKE_SUBJECT, mockSchemaRegistryClient,
+                DUMMY_SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(7);
@@ -102,7 +96,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        Message message = parseBytesToMessage(actualBytes);
+        Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
         Descriptors.FieldDescriptor stringField = message.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
         Descriptors.FieldDescriptor intField = message.getDescriptorForType().findFieldByName(TestUtils.INT_FIELD);
         Descriptors.FieldDescriptor longField = message.getDescriptorForType().findFieldByName(TestUtils.LONG_FIELD);
@@ -131,7 +125,9 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         );
 
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType,
+                FAKE_SUBJECT, mockSchemaRegistryClient,
+                DUMMY_SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData nestedRow = new GenericRowData(2);
@@ -143,7 +139,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        Message message = parseBytesToMessage(actualBytes);
+        Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
         Descriptors.FieldDescriptor nestedField = message.getDescriptorForType().findFieldByName(TestUtils.NESTED_FIELD);
         DynamicMessage nestedMessage = (DynamicMessage) message.getField(nestedField);
         Descriptors.FieldDescriptor stringField = nestedMessage.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
@@ -160,7 +156,9 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         );
 
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType,
+                FAKE_SUBJECT, mockSchemaRegistryClient,
+                DUMMY_SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(1);
@@ -169,7 +167,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        Message message = parseBytesToMessage(actualBytes);
+        Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
         Descriptors.FieldDescriptor arrayField = message.getDescriptorForType().findFieldByName(TestUtils.ARRAY_FIELD);
 
         Assertions.assertArrayEquals(new String[]{"a", "b"}, ((List) message.getField(arrayField)).toArray());
@@ -191,7 +189,9 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 new RowType.RowField(nestedMapField, new MapType(new VarCharType(), nestedMapValueType))
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType,
+                FAKE_SUBJECT, mockSchemaRegistryClient,
+                DUMMY_SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData rowData = new GenericRowData(3);
@@ -210,7 +210,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        Message message = parseBytesToMessage(actualBytes);
+        Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
 
         Descriptors.FieldDescriptor mapMessageField = message.getDescriptorForType().findFieldByName(TestUtils.MAP_FIELD);
         DynamicMessage mapMessage = (DynamicMessage) ((List) message.getField(mapMessageField)).get(0);
@@ -249,7 +249,9 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
                 ))
         );
         ProtoRegistryDynamicSerializationSchema protoRegistryDynamicSerializationSchema = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, className, rowType, SUBJECT_NAME, mockSchemaRegistryClient, SCHEMA_REGISTRY_URL);
+                TestUtils.DEFAULT_PACKAGE, className, rowType,
+                FAKE_SUBJECT, mockSchemaRegistryClient,
+                DUMMY_SCHEMA_REGISTRY_URL);
         protoRegistryDynamicSerializationSchema.open(null);
 
         GenericRowData nestedRow = new GenericRowData(2);
@@ -261,7 +263,7 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
 
         byte[] actualBytes = protoRegistryDynamicSerializationSchema.serialize(rowData);
 
-        Message message = parseBytesToMessage(actualBytes);
+        Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
         Descriptors.FieldDescriptor tsFieldDescriptor = message.getDescriptorForType().findFieldByName(TestUtils.TIMESTAMP_FIELD);
         DynamicMessage tsMessage = (DynamicMessage) message.getField(tsFieldDescriptor);
         Descriptors.FieldDescriptor secondsField = tsMessage.getDescriptorForType().findFieldByName(TestUtils.SECONDS_FIELD);
@@ -270,13 +272,6 @@ public class ProtoRegistryDynamicSerializationSchemaTest {
         Assertions.assertEquals(TestUtils.TEST_LONG, tsMessage.getField(secondsField));
         Assertions.assertEquals(TestUtils.TEST_INT, tsMessage.getField(nanosField));
 
-    }
-
-    private Message parseBytesToMessage(byte[] bytes) throws Exception {
-        Map<String, String> opts = new HashMap<>();
-        opts.put("schema.registry.url", SCHEMA_REGISTRY_URL);
-        KafkaProtobufDeserializer deser = new KafkaProtobufDeserializer(mockSchemaRegistryClient, opts);
-        return deser.deserialize(null, bytes);
     }
 
 }

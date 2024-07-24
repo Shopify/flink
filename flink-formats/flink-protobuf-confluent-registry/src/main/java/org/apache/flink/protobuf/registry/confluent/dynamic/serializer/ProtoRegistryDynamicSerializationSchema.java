@@ -22,10 +22,10 @@ import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
 
-import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.formats.protobuf.PbFormatConfig;
 import org.apache.flink.formats.protobuf.serialize.MessageSerializer;
 import org.apache.flink.formats.protobuf.serialize.RowToProtoConverter;
+import org.apache.flink.protobuf.registry.confluent.ProtobufConfluentSerializationSchema;
 import org.apache.flink.protobuf.registry.confluent.dynamic.ProtoCompiler;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
@@ -38,13 +38,14 @@ import java.util.Map;
  * Serialization schema that dynamically serializes RowData into Confluent Protobuf messages and
  * registers the schemas in the Confluent registry.
  */
-public class ProtoRegistryDynamicSerializationSchema implements SerializationSchema<RowData> {
+public class ProtoRegistryDynamicSerializationSchema implements ProtobufConfluentSerializationSchema {
+    private static final long serialVersionUID = 1L;
 
     private static final String PROTOBUF_OUTER_CLASS_NAME_SUFFIX = "OuterClass";
 
     private final String generatedPackageName;
     private final String generatedClassName;
-    private final RowType rowType;
+    private RowType rowType;
     private final String subjectName;
     private final SchemaRegistryClient schemaRegistryClient;
     private final String schemaRegistryUrl;
@@ -82,6 +83,16 @@ public class ProtoRegistryDynamicSerializationSchema implements SerializationSch
         MessageSerializer messageSerializer = new ConfluentMessageSerializer(kafkaProtobufSerializer, subjectName);
         PbFormatConfig formatConfig = new PbFormatConfig(generatedClass.getName(), false, true, null);
         rowToProtoConverter = new RowToProtoConverter(rowType, formatConfig, messageSerializer);
+    }
+
+    @Override
+    public void setRowType(RowType rowType) {
+        this.rowType = rowType;
+    }
+
+    @Override
+    public RowType getRowType() {
+        return this.rowType;
     }
 
     private Class generateProtoClassForRowType() throws Exception {

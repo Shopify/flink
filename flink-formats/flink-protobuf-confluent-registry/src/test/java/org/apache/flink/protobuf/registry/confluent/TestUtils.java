@@ -20,11 +20,17 @@ package org.apache.flink.protobuf.registry.confluent;
 
 import com.google.protobuf.ByteString;
 
+import com.google.protobuf.Message;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
+
 import org.apache.flink.table.types.logical.RowType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class TestUtils {
 
@@ -54,11 +60,23 @@ public class TestUtils {
     static public final int DEFAULT_SCHEMA_ID = 1;
     static public final String DEFAULT_CLASS_SUFFIX = "123";
     static public final String DEFAULT_CLASS_NAME = "TestClass";
+    public static final String DUMMY_SCHEMA_REGISTRY_URL = "http://registry:8081";
+    public static final String FAKE_TOPIC = "fake-topic";
+    public static final String FAKE_SUBJECT = "fake-subject";
+    public static final boolean IGNORE_PARSE_ERRORS = false;
+    public static final boolean READ_DEFAULT_VALUES = false;
 
     public static RowType createRowType(RowType.RowField... fields) {
         List<RowType.RowField> fieldList = new ArrayList<>();
         fieldList.addAll(Arrays.asList(fields));
         return new RowType(fieldList);
+    }
+
+    public static Message parseBytesToMessage(byte[] bytes, SchemaRegistryClient mockSchemaRegistryClient) {
+        Map<String, String> opts = new HashMap<>();
+        opts.put("schema.registry.url", DUMMY_SCHEMA_REGISTRY_URL);
+        KafkaProtobufDeserializer deser = new KafkaProtobufDeserializer(mockSchemaRegistryClient, opts);
+        return deser.deserialize(null, bytes);
     }
 
 }

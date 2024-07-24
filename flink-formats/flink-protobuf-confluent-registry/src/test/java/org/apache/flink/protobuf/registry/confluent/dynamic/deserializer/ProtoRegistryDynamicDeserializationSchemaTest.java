@@ -52,14 +52,15 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.DUMMY_SCHEMA_REGISTRY_URL;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.FAKE_TOPIC;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.IGNORE_PARSE_ERRORS;
+import static org.apache.flink.protobuf.registry.confluent.TestUtils.READ_DEFAULT_VALUES;
+
 class ProtoRegistryDynamicDeserializationSchemaTest {
 
     private MockSchemaRegistryClient mockSchemaRegistryClient;
     private KafkaProtobufSerializer kafkaProtobufSerializer;
-    private static final String DUMMY_SCHEMA_REGISTRY_URL = "http://registry:8081";
-    public static final String FAKE_TOPIC = "fake-topic";
-    private static final boolean IGNORE_PARSE_ERRORS = false;
-    private static final boolean READ_DEFAULT_VALUES = false;
 
     @BeforeEach
     public void setup() {

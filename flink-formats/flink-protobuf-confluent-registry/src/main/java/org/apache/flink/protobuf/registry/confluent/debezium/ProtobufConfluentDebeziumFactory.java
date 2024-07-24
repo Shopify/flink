@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,25 +16,19 @@
  * limitations under the License.
  */
 
-package org.apache.flink.protobuf.registry.confluent;
+package org.apache.flink.protobuf.registry.confluent.debezium;
 
-import io.confluent.kafka.schemaregistry.SchemaProvider;
 import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaProvider;
-
-import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.serialization.SerializationSchema;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatFactoryUtils;
 import org.apache.flink.protobuf.registry.confluent.dynamic.deserializer.ProtoRegistryDynamicDeserializationSchema;
 import org.apache.flink.protobuf.registry.confluent.dynamic.serializer.ProtoRegistryDynamicSerializationSchema;
-import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.connector.ChangelogMode;
-import org.apache.flink.table.connector.Projection;
 import org.apache.flink.table.connector.format.DecodingFormat;
 import org.apache.flink.table.connector.format.EncodingFormat;
 import org.apache.flink.table.connector.format.ProjectableDecodingFormat;
@@ -46,46 +40,16 @@ import org.apache.flink.table.factories.DynamicTableFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.factories.SerializationFormatFactory;
 import org.apache.flink.table.types.DataType;
-import org.apache.flink.table.types.logical.RowType;
+import org.apache.flink.types.RowKind;
 
-import javax.annotation.Nullable;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BASIC_AUTH_CREDENTIALS_SOURCE;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BASIC_AUTH_USER_INFO;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BEARER_AUTH_CREDENTIALS_SOURCE;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BEARER_AUTH_TOKEN;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.IGNORE_PARSE_ERRORS;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.MESSAGE_NAME;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.PACKAGE_NAME;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.PROPERTIES;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.READ_DEFAULT_VALUES;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.REGISTRY_CLIENT_CACHE_CAPACITY;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_KEYSTORE_LOCATION;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_KEYSTORE_PASSWORD;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_TRUSTSTORE_LOCATION;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_TRUSTSTORE_PASSWORD;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SUBJECT;
 import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.URL;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.WRITE_NULL_STRING_LITERAL;
 
-/**
- * Table format factory for providing configured instances of Confluent Protobuf to RowData {@link
- * SerializationSchema} and {@link DeserializationSchema}.
- */
-@Internal
-public class ProtobufConfluentFormatFactory
-        implements DeserializationFormatFactory, SerializationFormatFactory {
+public class ProtobufConfluentDebeziumFactory implements
+        DeserializationFormatFactory, SerializationFormatFactory {
 
-    public static final String IDENTIFIER = "protobuf-confluent";
+    public static final String IDENTIFIER = "protobuf-confluent-debezium";
 
     @Override
     public DecodingFormat<DeserializationSchema<RowData>> createDecodingFormat(
@@ -101,7 +65,7 @@ public class ProtobufConfluentFormatFactory
                     DynamicTableSource.Context context,
                     DataType producedDataType,
                     int[][] projections) {
-                return ProtobufConfluentFormatFactoryUtils.createDynamicDeserializationSchema(
+                ProtoRegistryDynamicDeserializationSchema wrappedDeser = ProtobufConfluentFormatFactoryUtils.createDynamicDeserializationSchema(
                         context,
                         producedDataType,
                         projections,
@@ -109,11 +73,17 @@ public class ProtobufConfluentFormatFactory
                         schemaRegistryURL,
                         formatOptions
                 );
+                return new ProtobufConfluentDebeziumDeserializationSchema(wrappedDeser);
             }
 
             @Override
             public ChangelogMode getChangelogMode() {
-                return ChangelogMode.insertOnly();
+                return ChangelogMode.newBuilder()
+                        .addContainedKind(RowKind.INSERT)
+                        .addContainedKind(RowKind.UPDATE_BEFORE)
+                        .addContainedKind(RowKind.UPDATE_AFTER)
+                        .addContainedKind(RowKind.DELETE)
+                        .build();
             }
         };
     }
@@ -131,17 +101,23 @@ public class ProtobufConfluentFormatFactory
             @Override
             public SerializationSchema<RowData> createRuntimeEncoder(
                     DynamicTableSink.Context context, DataType consumedDataType) {
-                return ProtobufConfluentFormatFactoryUtils.createDynamicSerializationSchema(
+                ProtoRegistryDynamicSerializationSchema wrappedSer = ProtobufConfluentFormatFactoryUtils.createDynamicSerializationSchema(
                         consumedDataType,
                         schemaRegistryClient,
                         schemaRegistryURL,
                         formatOptions
                 );
+                return new ProtobufConfluentDebeziumSerializationSchema(wrappedSer);
             }
 
             @Override
             public ChangelogMode getChangelogMode() {
-                return ChangelogMode.insertOnly();
+                return ChangelogMode.newBuilder()
+                        .addContainedKind(RowKind.INSERT)
+                        .addContainedKind(RowKind.UPDATE_BEFORE)
+                        .addContainedKind(RowKind.UPDATE_AFTER)
+                        .addContainedKind(RowKind.DELETE)
+                        .build();
             }
         };
     }
