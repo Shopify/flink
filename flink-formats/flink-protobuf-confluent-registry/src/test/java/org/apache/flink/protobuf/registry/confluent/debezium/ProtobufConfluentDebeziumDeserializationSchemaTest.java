@@ -18,22 +18,19 @@
 
 package org.apache.flink.protobuf.registry.confluent.debezium;
 
-import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
-import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
-import my_table.products.DebeziumProto3;
-
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.protobuf.registry.confluent.dynamic.deserializer.ProtoRegistryDynamicDeserializationSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.RowType;
-
 import org.apache.flink.table.types.logical.VarCharType;
-
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.Collector;
 
+import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
+import my_table.products.DebeziumProto3;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,39 +65,47 @@ public class ProtobufConfluentDebeziumDeserializationSchemaTest {
         opts.put("schema.registry.url", DUMMY_SCHEMA_REGISTRY_URL);
         kafkaProtobufSerializer = new KafkaProtobufSerializer(mockSchemaRegistryClient, opts);
         collector = new SimpleCollector();
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(STRING_FIELD, new VarCharType()),
-                new RowType.RowField(LONG_FIELD, new BigIntType()),
-                new RowType.RowField(BOOL_FIELD, new BooleanType())
-        );
-        ProtoRegistryDynamicDeserializationSchema wrappedDeser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(STRING_FIELD, new VarCharType()),
+                        new RowType.RowField(LONG_FIELD, new BigIntType()),
+                        new RowType.RowField(BOOL_FIELD, new BooleanType()));
+        ProtoRegistryDynamicDeserializationSchema wrappedDeser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser = new ProtobufConfluentDebeziumDeserializationSchema(wrappedDeser);
         deser.open(null);
     }
 
     @Test
     public void deserializeDelete() throws Exception {
-        DebeziumProto3.Envelope.Value before = DebeziumProto3.Envelope.Value.newBuilder()
-                .setString(TEST_STRING)
-                .setLong(TEST_LONG)
-                .setBool(TEST_BOOL)
-                .build();
-        DebeziumProto3.Envelope.Source source = DebeziumProto3.Envelope.Source.newBuilder()
-                .setVersion(TEST_STRING)
-                .setConnector(TEST_STRING)
-                .setDb(TEST_STRING)
-                .setTable(TEST_STRING)
-                .setTsMs(TEST_LONG)
-                .setSnapshot(TEST_STRING)
-                .build();
-        DebeziumProto3.Envelope envelope = DebeziumProto3.Envelope.newBuilder()
-                .setOp(ProtobufConfluentDebeziumDeserializationSchema.OP_DELETE)
-                .setBefore(before)
-                .setSource(source)
-                .setTsMs(TEST_LONG)
-                .build();
+        DebeziumProto3.Envelope.Value before =
+                DebeziumProto3.Envelope.Value.newBuilder()
+                        .setString(TEST_STRING)
+                        .setLong(TEST_LONG)
+                        .setBool(TEST_BOOL)
+                        .build();
+        DebeziumProto3.Envelope.Source source =
+                DebeziumProto3.Envelope.Source.newBuilder()
+                        .setVersion(TEST_STRING)
+                        .setConnector(TEST_STRING)
+                        .setDb(TEST_STRING)
+                        .setTable(TEST_STRING)
+                        .setTsMs(TEST_LONG)
+                        .setSnapshot(TEST_STRING)
+                        .build();
+        DebeziumProto3.Envelope envelope =
+                DebeziumProto3.Envelope.newBuilder()
+                        .setOp(ProtobufConfluentDebeziumDeserializationSchema.OP_DELETE)
+                        .setBefore(before)
+                        .setSource(source)
+                        .setTsMs(TEST_LONG)
+                        .build();
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, envelope);
 
         deser.deserialize(inBytes, collector);
@@ -113,36 +118,39 @@ public class ProtobufConfluentDebeziumDeserializationSchemaTest {
         Assertions.assertEquals(TEST_LONG, actual.getLong(1));
         Assertions.assertEquals(TEST_BOOL, actual.getBoolean(2));
         Assertions.assertEquals(RowKind.DELETE, actual.getRowKind());
-
     }
 
     @Test
     public void deserializeUpdate() throws Exception {
-        DebeziumProto3.Envelope.Value before = DebeziumProto3.Envelope.Value.newBuilder()
-                .setString(TEST_STRING)
-                .setLong(TEST_LONG)
-                .setBool(TEST_BOOL)
-                .build();
-        DebeziumProto3.Envelope.Value after = DebeziumProto3.Envelope.Value.newBuilder()
-                .setString(TEST_STRING)
-                .setLong((TEST_LONG * 2))
-                .setBool(false)
-                .build();
-        DebeziumProto3.Envelope.Source source = DebeziumProto3.Envelope.Source.newBuilder()
-                .setVersion(TEST_STRING)
-                .setConnector(TEST_STRING)
-                .setDb(TEST_STRING)
-                .setTable(TEST_STRING)
-                .setTsMs(TEST_LONG)
-                .setSnapshot(TEST_STRING)
-                .build();
-        DebeziumProto3.Envelope envelope = DebeziumProto3.Envelope.newBuilder()
-                .setOp(ProtobufConfluentDebeziumDeserializationSchema.OP_UPDATE)
-                .setBefore(before)
-                .setAfter(after)
-                .setSource(source)
-                .setTsMs(TEST_LONG)
-                .build();
+        DebeziumProto3.Envelope.Value before =
+                DebeziumProto3.Envelope.Value.newBuilder()
+                        .setString(TEST_STRING)
+                        .setLong(TEST_LONG)
+                        .setBool(TEST_BOOL)
+                        .build();
+        DebeziumProto3.Envelope.Value after =
+                DebeziumProto3.Envelope.Value.newBuilder()
+                        .setString(TEST_STRING)
+                        .setLong((TEST_LONG * 2))
+                        .setBool(false)
+                        .build();
+        DebeziumProto3.Envelope.Source source =
+                DebeziumProto3.Envelope.Source.newBuilder()
+                        .setVersion(TEST_STRING)
+                        .setConnector(TEST_STRING)
+                        .setDb(TEST_STRING)
+                        .setTable(TEST_STRING)
+                        .setTsMs(TEST_LONG)
+                        .setSnapshot(TEST_STRING)
+                        .build();
+        DebeziumProto3.Envelope envelope =
+                DebeziumProto3.Envelope.newBuilder()
+                        .setOp(ProtobufConfluentDebeziumDeserializationSchema.OP_UPDATE)
+                        .setBefore(before)
+                        .setAfter(after)
+                        .setSource(source)
+                        .setTsMs(TEST_LONG)
+                        .build();
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, envelope);
 
         deser.deserialize(inBytes, collector);
@@ -163,30 +171,32 @@ public class ProtobufConfluentDebeziumDeserializationSchemaTest {
         Assertions.assertEquals(TEST_LONG * 2, insertActual.getLong(1));
         Assertions.assertFalse(insertActual.getBoolean(2));
         Assertions.assertEquals(RowKind.UPDATE_AFTER, insertActual.getRowKind());
-
     }
 
     @Test
     public void deserializeCreate() throws Exception {
-        DebeziumProto3.Envelope.Value after = DebeziumProto3.Envelope.Value.newBuilder()
-                .setString(TEST_STRING)
-                .setLong(TEST_LONG)
-                .setBool(TEST_BOOL)
-                .build();
-        DebeziumProto3.Envelope.Source source = DebeziumProto3.Envelope.Source.newBuilder()
-                .setVersion(TEST_STRING)
-                .setConnector(TEST_STRING)
-                .setDb(TEST_STRING)
-                .setTable(TEST_STRING)
-                .setTsMs(TEST_LONG)
-                .setSnapshot(TEST_STRING)
-                .build();
-        DebeziumProto3.Envelope envelope = DebeziumProto3.Envelope.newBuilder()
-                .setOp(ProtobufConfluentDebeziumDeserializationSchema.OP_CREATE)
-                .setAfter(after)
-                .setSource(source)
-                .setTsMs(TEST_LONG)
-                .build();
+        DebeziumProto3.Envelope.Value after =
+                DebeziumProto3.Envelope.Value.newBuilder()
+                        .setString(TEST_STRING)
+                        .setLong(TEST_LONG)
+                        .setBool(TEST_BOOL)
+                        .build();
+        DebeziumProto3.Envelope.Source source =
+                DebeziumProto3.Envelope.Source.newBuilder()
+                        .setVersion(TEST_STRING)
+                        .setConnector(TEST_STRING)
+                        .setDb(TEST_STRING)
+                        .setTable(TEST_STRING)
+                        .setTsMs(TEST_LONG)
+                        .setSnapshot(TEST_STRING)
+                        .build();
+        DebeziumProto3.Envelope envelope =
+                DebeziumProto3.Envelope.newBuilder()
+                        .setOp(ProtobufConfluentDebeziumDeserializationSchema.OP_CREATE)
+                        .setAfter(after)
+                        .setSource(source)
+                        .setTsMs(TEST_LONG)
+                        .build();
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, envelope);
 
         deser.deserialize(inBytes, collector);
@@ -199,7 +209,6 @@ public class ProtobufConfluentDebeziumDeserializationSchemaTest {
         Assertions.assertEquals(TEST_LONG, actual.getLong(1));
         Assertions.assertEquals(TEST_BOOL, actual.getBoolean(2));
         Assertions.assertEquals(RowKind.INSERT, actual.getRowKind());
-
     }
 
     private static class SimpleCollector implements Collector<RowData> {
@@ -212,7 +221,6 @@ public class ProtobufConfluentDebeziumDeserializationSchemaTest {
         }
 
         @Override
-        public void close() {
-        }
+        public void close() {}
     }
 }

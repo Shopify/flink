@@ -22,10 +22,10 @@ import org.apache.flink.table.types.logical.RowType;
 
 public interface MutableRowTypeSchema {
     /**
-     * Sets the row type information for the deserialization schema.
-     * While the "vanilla" implementations of this interface will never need to call this method,
-     * it is useful for the debezium format, which needs to decorate the user's row type to match
-     * the debezium payload format.
+     * Sets the row type information for the deserialization schema. While the "vanilla"
+     * implementations of this interface will never need to call this method, it is useful for the
+     * debezium format, which needs to decorate the user's row type to match the debezium payload
+     * format.
      *
      * @param rowType The row type information.
      */

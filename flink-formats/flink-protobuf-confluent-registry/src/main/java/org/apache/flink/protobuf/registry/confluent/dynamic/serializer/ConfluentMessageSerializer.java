@@ -18,16 +18,17 @@
 
 package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 
+import org.apache.flink.formats.protobuf.serialize.MessageSerializer;
+
 import com.google.protobuf.AbstractMessage;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
-
-import org.apache.flink.formats.protobuf.serialize.MessageSerializer;
 
 public class ConfluentMessageSerializer implements MessageSerializer {
     private final KafkaProtobufSerializer kafkaProtobufSerializer;
     private final String subjectName;
 
-    public ConfluentMessageSerializer(KafkaProtobufSerializer kafkaProtobufSerializer, String subjectName) {
+    public ConfluentMessageSerializer(
+            KafkaProtobufSerializer kafkaProtobufSerializer, String subjectName) {
         this.kafkaProtobufSerializer = kafkaProtobufSerializer;
         this.subjectName = subjectName;
     }

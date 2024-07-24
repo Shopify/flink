@@ -21,4 +21,5 @@ package org.apache.flink.protobuf.registry.confluent;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.table.data.RowData;
 
-public interface ProtobufConfluentDeserializationSchema extends DeserializationSchema<RowData>, MutableRowTypeSchema {}
+public interface ProtobufConfluentDeserializationSchema
+        extends DeserializationSchema<RowData>, MutableRowTypeSchema {}

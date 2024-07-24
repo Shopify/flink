@@ -39,7 +39,8 @@ import static org.apache.flink.table.types.utils.TypeConversions.fromLogicalToDa
  * RowData}. The deserialization schema knows Debezium's schema definition and can extract the
  * database data and convert into {@link RowData} with {@link RowKind}.
  */
-public class ProtobufConfluentDebeziumDeserializationSchema implements DeserializationSchema<RowData> {
+public class ProtobufConfluentDebeziumDeserializationSchema
+        implements DeserializationSchema<RowData> {
     private static final long serialVersionUID = 1L;
 
     /** snapshot read. */
@@ -59,8 +60,7 @@ public class ProtobufConfluentDebeziumDeserializationSchema implements Deseriali
     private final ProtobufConfluentDeserializationSchema protobufDeserializationSchema;
 
     public ProtobufConfluentDebeziumDeserializationSchema(
-            ProtobufConfluentDeserializationSchema protobufDeserializationSchema
-    ) {
+            ProtobufConfluentDeserializationSchema protobufDeserializationSchema) {
         this.protobufDeserializationSchema = protobufDeserializationSchema;
         updateRowType(protobufDeserializationSchema);
     }
@@ -83,7 +83,8 @@ public class ProtobufConfluentDebeziumDeserializationSchema implements Deseriali
             return;
         }
         try {
-            GenericRowData row = (GenericRowData) protobufDeserializationSchema.deserialize(message);
+            GenericRowData row =
+                    (GenericRowData) protobufDeserializationSchema.deserialize(message);
 
             GenericRowData before = (GenericRowData) row.getField(0);
             GenericRowData after = (GenericRowData) row.getField(1);
@@ -117,7 +118,6 @@ public class ProtobufConfluentDebeziumDeserializationSchema implements Deseriali
             // a big try catch to protect the processing.
             throw new IOException("Can't deserialize Debezium Protobuf message.", t);
         }
-
     }
 
     @Override
@@ -134,11 +134,13 @@ public class ProtobufConfluentDebeziumDeserializationSchema implements Deseriali
         // Debezium Avro contains other information, e.g. "source", "ts_ms"
         // but we don't need them
         DataType originalDataType = fromLogicalToDataType(mutableRowTypeSchema.getRowType());
-        RowType newRowType = (RowType) DataTypes.ROW(
-                DataTypes.FIELD("before", originalDataType.nullable()),
-                DataTypes.FIELD("after", originalDataType.nullable()),
-                DataTypes.FIELD("op", DataTypes.STRING()))
-                .getLogicalType();
+        RowType newRowType =
+                (RowType)
+                        DataTypes.ROW(
+                                        DataTypes.FIELD("before", originalDataType.nullable()),
+                                        DataTypes.FIELD("after", originalDataType.nullable()),
+                                        DataTypes.FIELD("op", DataTypes.STRING()))
+                                .getLogicalType();
         mutableRowTypeSchema.setRowType(newRowType);
     }
 }

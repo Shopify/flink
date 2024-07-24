@@ -18,14 +18,8 @@
 
 package org.apache.flink.protobuf.registry.confluent.dynamic.deserializer;
 
-import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
-import io.confluent.kafka.schemaregistry.client.rest.entities.SchemaReference;
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
-import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
-
 import org.apache.flink.formats.protobuf.proto.AddressAndUser;
 import org.apache.flink.formats.protobuf.proto.FlatProto3OuterClass;
-
 import org.apache.flink.formats.protobuf.proto.MapProto3;
 import org.apache.flink.formats.protobuf.proto.NestedProto3OuterClass;
 import org.apache.flink.formats.protobuf.proto.TimestampProto3OuterClass;
@@ -41,9 +35,12 @@ import org.apache.flink.table.types.logical.FloatType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.MapType;
 import org.apache.flink.table.types.logical.RowType;
-
 import org.apache.flink.table.types.logical.VarCharType;
 
+import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.rest.entities.SchemaReference;
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
+import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,28 +69,34 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
 
     @Test
     public void deserializePrimitives() throws Exception {
-        FlatProto3OuterClass.FlatProto3 in = FlatProto3OuterClass.FlatProto3.newBuilder()
-                .setString(TestUtils.TEST_STRING)
-                .setInt(TestUtils.TEST_INT)
-                .setLong(TestUtils.TEST_LONG)
-                .setFloat(TestUtils.TEST_FLOAT)
-                .setDouble(TestUtils.TEST_DOUBLE)
-                .addInts(TestUtils.TEST_INT)
-                .setBytes(TestUtils.TEST_BYTES)
-                .setBool(TestUtils.TEST_BOOL)
-                .build();
+        FlatProto3OuterClass.FlatProto3 in =
+                FlatProto3OuterClass.FlatProto3.newBuilder()
+                        .setString(TestUtils.TEST_STRING)
+                        .setInt(TestUtils.TEST_INT)
+                        .setLong(TestUtils.TEST_LONG)
+                        .setFloat(TestUtils.TEST_FLOAT)
+                        .setDouble(TestUtils.TEST_DOUBLE)
+                        .addInts(TestUtils.TEST_INT)
+                        .setBytes(TestUtils.TEST_BYTES)
+                        .setBool(TestUtils.TEST_BOOL)
+                        .build();
 
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
-                new RowType.RowField(TestUtils.INT_FIELD, new IntType()),
-                new RowType.RowField(TestUtils.LONG_FIELD, new BigIntType())
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                        new RowType.RowField(TestUtils.INT_FIELD, new IntType()),
+                        new RowType.RowField(TestUtils.LONG_FIELD, new BigIntType()));
 
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         RowData actual = deser.deserialize(inBytes);
@@ -105,31 +108,40 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
 
     @Test
     public void deserializeNestedRow() throws Exception {
-        NestedProto3OuterClass.NestedProto3 in = NestedProto3OuterClass.NestedProto3.newBuilder()
-                .setString(TestUtils.TEST_STRING)
-                .setInt(TestUtils.TEST_INT)
-                .setLong(TestUtils.TEST_LONG)
-                .setNested(NestedProto3OuterClass.NestedProto3.Nested.newBuilder()
-                        .setDouble(TestUtils.TEST_DOUBLE)
-                        .setFloat(TestUtils.TEST_FLOAT)
-                        .build()
-                )
-                .build();
+        NestedProto3OuterClass.NestedProto3 in =
+                NestedProto3OuterClass.NestedProto3.newBuilder()
+                        .setString(TestUtils.TEST_STRING)
+                        .setInt(TestUtils.TEST_INT)
+                        .setLong(TestUtils.TEST_LONG)
+                        .setNested(
+                                NestedProto3OuterClass.NestedProto3.Nested.newBuilder()
+                                        .setDouble(TestUtils.TEST_DOUBLE)
+                                        .setFloat(TestUtils.TEST_FLOAT)
+                                        .build())
+                        .build();
 
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.NESTED_FIELD, TestUtils.createRowType(
-                        new RowType.RowField(TestUtils.FLOAT_FIELD, new FloatType()),
-                        new RowType.RowField(TestUtils.DOUBLE_FIELD, new DoubleType())
-                )),
-                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
-                new RowType.RowField(TestUtils.INT_FIELD, new IntType())
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(
+                                TestUtils.NESTED_FIELD,
+                                TestUtils.createRowType(
+                                        new RowType.RowField(
+                                                TestUtils.FLOAT_FIELD, new FloatType()),
+                                        new RowType.RowField(
+                                                TestUtils.DOUBLE_FIELD, new DoubleType()))),
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()),
+                        new RowType.RowField(TestUtils.INT_FIELD, new IntType()));
 
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         RowData actual = deser.deserialize(inBytes);
@@ -141,58 +153,76 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         nestedValue.setField(0, TestUtils.TEST_FLOAT);
         nestedValue.setField(1, TestUtils.TEST_DOUBLE);
         Assertions.assertEquals(nestedValue, actual.getRow(0, 2));
-
     }
 
     @Test
     public void deserializeArray() throws Exception {
-        FlatProto3OuterClass.FlatProto3 in = FlatProto3OuterClass.FlatProto3.newBuilder()
-                .addInts(TestUtils.TEST_INT)
-                .addInts(TestUtils.TEST_INT * 2)
-                .build();
+        FlatProto3OuterClass.FlatProto3 in =
+                FlatProto3OuterClass.FlatProto3.newBuilder()
+                        .addInts(TestUtils.TEST_INT)
+                        .addInts(TestUtils.TEST_INT * 2)
+                        .build();
 
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField("ints", new ArrayType(new IntType()))
-        );
+        RowType rowType =
+                TestUtils.createRowType(new RowType.RowField("ints", new ArrayType(new IntType())));
 
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         RowData actual = deser.deserialize(inBytes);
         Assertions.assertEquals(1, actual.getArity());
         Assertions.assertEquals(TestUtils.TEST_INT, actual.getArray(0).getInt(0));
         Assertions.assertEquals(TestUtils.TEST_INT * 2, actual.getArray(0).getInt(1));
-
     }
 
     @Test
     public void deserializeMap() throws Exception {
-        MapProto3.Proto3Map in = MapProto3.Proto3Map.newBuilder()
-                .putMap(TestUtils.TEST_STRING, TestUtils.TEST_STRING)
-                .putNested(TestUtils.TEST_STRING, MapProto3.Proto3Map.Nested.newBuilder()
-                        .setDouble(TestUtils.TEST_DOUBLE)
-                        .setFloat(TestUtils.TEST_FLOAT)
-                        .build()
-                )
-                .build();
+        MapProto3.Proto3Map in =
+                MapProto3.Proto3Map.newBuilder()
+                        .putMap(TestUtils.TEST_STRING, TestUtils.TEST_STRING)
+                        .putNested(
+                                TestUtils.TEST_STRING,
+                                MapProto3.Proto3Map.Nested.newBuilder()
+                                        .setDouble(TestUtils.TEST_DOUBLE)
+                                        .setFloat(TestUtils.TEST_FLOAT)
+                                        .build())
+                        .build();
 
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.MAP_FIELD, new MapType(new VarCharType(), new VarCharType())),
-                new RowType.RowField(TestUtils.NESTED_FIELD, new MapType(new VarCharType(), TestUtils.createRowType(
-                        new RowType.RowField(TestUtils.DOUBLE_FIELD, new DoubleType()),
-                        new RowType.RowField(TestUtils.FLOAT_FIELD, new DoubleType())
-                )))
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(
+                                TestUtils.MAP_FIELD,
+                                new MapType(new VarCharType(), new VarCharType())),
+                        new RowType.RowField(
+                                TestUtils.NESTED_FIELD,
+                                new MapType(
+                                        new VarCharType(),
+                                        TestUtils.createRowType(
+                                                new RowType.RowField(
+                                                        TestUtils.DOUBLE_FIELD, new DoubleType()),
+                                                new RowType.RowField(
+                                                        TestUtils.FLOAT_FIELD,
+                                                        new DoubleType())))));
 
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         RowData actual = deser.deserialize(inBytes);
@@ -207,31 +237,38 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
         nestedMapValue.setField(0, TestUtils.TEST_DOUBLE);
         nestedMapValue.setField(1, TestUtils.TEST_FLOAT);
         Assertions.assertEquals(nestedMapValue, actual.getMap(1).valueArray().getRow(0, 2));
-
     }
 
     @Test
     public void deserializeTimestamp() throws Exception {
-        TimestampProto3OuterClass.TimestampProto3 in = TimestampProto3OuterClass.TimestampProto3.newBuilder()
-                .setTs(
-                        com.google.protobuf.Timestamp.newBuilder()
-                                .setSeconds(TestUtils.TEST_LONG)
-                                .setNanos(TestUtils.TEST_INT)
-                                .build()
-                )
-                .build();
+        TimestampProto3OuterClass.TimestampProto3 in =
+                TimestampProto3OuterClass.TimestampProto3.newBuilder()
+                        .setTs(
+                                com.google.protobuf.Timestamp.newBuilder()
+                                        .setSeconds(TestUtils.TEST_LONG)
+                                        .setNanos(TestUtils.TEST_INT)
+                                        .build())
+                        .build();
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.TIMESTAMP_FIELD, TestUtils.createRowType(
-                        new RowType.RowField(TestUtils.SECONDS_FIELD, new BigIntType()),
-                        new RowType.RowField(TestUtils.NANOS_FIELD, new IntType())
-                ))
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(
+                                TestUtils.TIMESTAMP_FIELD,
+                                TestUtils.createRowType(
+                                        new RowType.RowField(
+                                                TestUtils.SECONDS_FIELD, new BigIntType()),
+                                        new RowType.RowField(
+                                                TestUtils.NANOS_FIELD, new IntType()))));
 
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         RowData actual = deser.deserialize(inBytes);
@@ -246,40 +283,49 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
     @Test
     public void deserializeUsingSchemaWithReferences() throws Exception {
 
-        ProtobufSchema addressSchema = new ProtobufSchema(AddressAndUser.AddressProto.getDescriptor());
+        ProtobufSchema addressSchema =
+                new ProtobufSchema(AddressAndUser.AddressProto.getDescriptor());
         mockSchemaRegistryClient.register("Address", addressSchema);
 
         // Register the User schema
         SchemaReference schemaReference = new SchemaReference("Address", "Address", null);
-        ProtobufSchema userSchema = new ProtobufSchema(AddressAndUser.UserProto.getDescriptor(), Arrays.asList(schemaReference));
+        ProtobufSchema userSchema =
+                new ProtobufSchema(
+                        AddressAndUser.UserProto.getDescriptor(), Arrays.asList(schemaReference));
         mockSchemaRegistryClient.register("User", userSchema);
 
         Assertions.assertFalse(
                 mockSchemaRegistryClient.getLatestSchemaMetadata("User").getReferences().isEmpty(),
-                "User schema should have references"
-        );
+                "User schema should have references");
 
-        AddressAndUser.UserProto in = AddressAndUser.UserProto.newBuilder()
-                .setName(TestUtils.TEST_STRING)
-                .setAddress(AddressAndUser.AddressProto.newBuilder()
-                        .setStreet(TestUtils.TEST_STRING)
-                        .setCity(TestUtils.TEST_STRING)
-                        .build()
-                )
-                .build();
+        AddressAndUser.UserProto in =
+                AddressAndUser.UserProto.newBuilder()
+                        .setName(TestUtils.TEST_STRING)
+                        .setAddress(
+                                AddressAndUser.AddressProto.newBuilder()
+                                        .setStreet(TestUtils.TEST_STRING)
+                                        .setCity(TestUtils.TEST_STRING)
+                                        .build())
+                        .build();
 
         byte[] inBytes = kafkaProtobufSerializer.serialize(FAKE_TOPIC, in);
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField("name", new VarCharType()),
-                new RowType.RowField("address", TestUtils.createRowType(
-                        new RowType.RowField("street", new VarCharType()),
-                        new RowType.RowField("city", new VarCharType())
-                ))
-        );
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField("name", new VarCharType()),
+                        new RowType.RowField(
+                                "address",
+                                TestUtils.createRowType(
+                                        new RowType.RowField("street", new VarCharType()),
+                                        new RowType.RowField("city", new VarCharType()))));
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         RowData actual = deser.deserialize(inBytes);
@@ -294,15 +340,19 @@ class ProtoRegistryDynamicDeserializationSchemaTest {
 
         byte[] inBytes = null;
 
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType())
-        );
-        ProtoRegistryDynamicDeserializationSchema deser = new ProtoRegistryDynamicDeserializationSchema(
-                mockSchemaRegistryClient, DUMMY_SCHEMA_REGISTRY_URL, rowType, null, IGNORE_PARSE_ERRORS, READ_DEFAULT_VALUES
-        );
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()));
+        ProtoRegistryDynamicDeserializationSchema deser =
+                new ProtoRegistryDynamicDeserializationSchema(
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL,
+                        rowType,
+                        null,
+                        IGNORE_PARSE_ERRORS,
+                        READ_DEFAULT_VALUES);
         deser.open(null);
 
         Assertions.assertNull(deser.deserialize(inBytes));
     }
-
 }

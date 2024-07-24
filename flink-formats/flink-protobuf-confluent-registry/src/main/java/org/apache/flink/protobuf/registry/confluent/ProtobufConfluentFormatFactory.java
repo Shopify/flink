@@ -18,23 +18,12 @@
 
 package org.apache.flink.protobuf.registry.confluent;
 
-import io.confluent.kafka.schemaregistry.SchemaProvider;
-import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
-import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
-
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaProvider;
-
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.serialization.SerializationSchema;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
-import org.apache.flink.protobuf.registry.confluent.dynamic.deserializer.ProtoRegistryDynamicDeserializationSchema;
-import org.apache.flink.protobuf.registry.confluent.dynamic.serializer.ProtoRegistryDynamicSerializationSchema;
-import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.connector.ChangelogMode;
-import org.apache.flink.table.connector.Projection;
 import org.apache.flink.table.connector.format.DecodingFormat;
 import org.apache.flink.table.connector.format.EncodingFormat;
 import org.apache.flink.table.connector.format.ProjectableDecodingFormat;
@@ -46,36 +35,13 @@ import org.apache.flink.table.factories.DynamicTableFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.factories.SerializationFormatFactory;
 import org.apache.flink.table.types.DataType;
-import org.apache.flink.table.types.logical.RowType;
 
-import javax.annotation.Nullable;
+import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BASIC_AUTH_CREDENTIALS_SOURCE;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BASIC_AUTH_USER_INFO;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BEARER_AUTH_CREDENTIALS_SOURCE;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.BEARER_AUTH_TOKEN;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.IGNORE_PARSE_ERRORS;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.MESSAGE_NAME;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.PACKAGE_NAME;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.PROPERTIES;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.READ_DEFAULT_VALUES;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.REGISTRY_CLIENT_CACHE_CAPACITY;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_KEYSTORE_LOCATION;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_KEYSTORE_PASSWORD;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_TRUSTSTORE_LOCATION;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SSL_TRUSTSTORE_PASSWORD;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.SUBJECT;
 import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.URL;
-import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.WRITE_NULL_STRING_LITERAL;
 
 /**
  * Table format factory for providing configured instances of Confluent Protobuf to RowData {@link
@@ -93,7 +59,8 @@ public class ProtobufConfluentFormatFactory
         FactoryUtil.validateFactoryOptions(this, formatOptions);
 
         String schemaRegistryURL = formatOptions.get(URL);
-        SchemaRegistryClient schemaRegistryClient = ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
+        SchemaRegistryClient schemaRegistryClient =
+                ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
 
         return new ProjectableDecodingFormat<DeserializationSchema<RowData>>() {
             @Override
@@ -107,8 +74,7 @@ public class ProtobufConfluentFormatFactory
                         projections,
                         schemaRegistryClient,
                         schemaRegistryURL,
-                        formatOptions
-                );
+                        formatOptions);
             }
 
             @Override
@@ -122,21 +88,19 @@ public class ProtobufConfluentFormatFactory
     public EncodingFormat<SerializationSchema<RowData>> createEncodingFormat(
             DynamicTableFactory.Context context, ReadableConfig formatOptions) {
         FactoryUtil.validateFactoryOptions(this, formatOptions);
-        ProtobufConfluentFormatFactoryUtils.validateDynamicEncodingOptions(formatOptions, IDENTIFIER);
+        ProtobufConfluentFormatFactoryUtils.validateDynamicEncodingOptions(
+                formatOptions, IDENTIFIER);
 
         String schemaRegistryURL = formatOptions.get(URL);
-        CachedSchemaRegistryClient schemaRegistryClient = ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
+        CachedSchemaRegistryClient schemaRegistryClient =
+                ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
 
         return new EncodingFormat<SerializationSchema<RowData>>() {
             @Override
             public SerializationSchema<RowData> createRuntimeEncoder(
                     DynamicTableSink.Context context, DataType consumedDataType) {
                 return ProtobufConfluentFormatFactoryUtils.createDynamicSerializationSchema(
-                        consumedDataType,
-                        schemaRegistryClient,
-                        schemaRegistryURL,
-                        formatOptions
-                );
+                        consumedDataType, schemaRegistryClient, schemaRegistryURL, formatOptions);
             }
 
             @Override

@@ -18,12 +18,6 @@
 
 package org.apache.flink.protobuf.registry.confluent.dynamic.deserializer;
 
-import com.google.protobuf.Message;
-import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
-
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
-import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
-
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.formats.protobuf.PbFormatConfig;
 import org.apache.flink.formats.protobuf.deserialize.ProtoToRowConverter;
@@ -31,6 +25,11 @@ import org.apache.flink.protobuf.registry.confluent.ProtobufConfluentDeserializa
 import org.apache.flink.protobuf.registry.confluent.dynamic.ProtoCompiler;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
+
+import com.google.protobuf.Message;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
+import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -40,16 +39,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Deserialization schema that dynamically deserializes Confluent Protobuf messages using
- * schemas fetched from the schema registry.
+ * Deserialization schema that dynamically deserializes Confluent Protobuf messages using schemas
+ * fetched from the schema registry.
  *
  * <p>Use TODO ProtoRegistryStaticDeserializationSchema to deserialize messages with a fixed schema.
- * While we expect that all messages in the input will be compatible with the row schema,
- * it is possible that we will encounter more than one version of the schema in the input.
- * Therefore, for a number of services used by ProtoRegistryDeserializationSchema, we need to
- * maintain a map of schema ID -> service.
+ * While we expect that all messages in the input will be compatible with the row schema, it is
+ * possible that we will encounter more than one version of the schema in the input. Therefore, for
+ * a number of services used by ProtoRegistryDeserializationSchema, we need to maintain a map of
+ * schema ID -> service.
  */
-public class ProtoRegistryDynamicDeserializationSchema implements ProtobufConfluentDeserializationSchema {
+public class ProtoRegistryDynamicDeserializationSchema
+        implements ProtobufConfluentDeserializationSchema {
     private static final long serialVersionUID = 1L;
 
     private RowType rowType;
@@ -67,7 +67,7 @@ public class ProtoRegistryDynamicDeserializationSchema implements ProtobufConflu
     private transient Map<Integer, Class> generatedMessageClasses;
     private transient ProtoCompiler protoCompiler;
 
-    private final static String FAKE_TOPIC = "fake_topic";
+    private static final String FAKE_TOPIC = "fake_topic";
 
     public ProtoRegistryDynamicDeserializationSchema(
             SchemaRegistryClient schemaRegistryClient,
@@ -93,7 +93,8 @@ public class ProtoRegistryDynamicDeserializationSchema implements ProtobufConflu
 
         int schemaId = getSchemaIdFromMessage(message);
         ProtoToRowConverter protoToRowConverter = getOrCreateProtoConverter(schemaId);
-        KafkaProtobufDeserializer kafkaProtobufDeserializer = getOrCreateKafkaProtobufDeserializer(schemaId);
+        KafkaProtobufDeserializer kafkaProtobufDeserializer =
+                getOrCreateKafkaProtobufDeserializer(schemaId);
         Message protoMessage = kafkaProtobufDeserializer.deserialize(FAKE_TOPIC, message);
 
         try {
@@ -164,7 +165,8 @@ public class ProtoRegistryDynamicDeserializationSchema implements ProtobufConflu
             Map<String, String> config = new HashMap<>();
             config.put("schema.registry.url", schemaRegistryUrl);
             Class messageClass = generatedMessageClasses.get(schemaId);
-            KafkaProtobufDeserializer deserializer = new KafkaProtobufDeserializer(schemaRegistryClient, config, messageClass);
+            KafkaProtobufDeserializer deserializer =
+                    new KafkaProtobufDeserializer(schemaRegistryClient, config, messageClass);
             kafkaProtobufDeserializers.put(schemaId, deserializer);
         }
         return kafkaProtobufDeserializers.get(schemaId);
@@ -178,16 +180,16 @@ public class ProtoRegistryDynamicDeserializationSchema implements ProtobufConflu
         ProtobufSchema protobufSchema = getProtobufSchema(schemaId);
         Class messageClass = protoCompiler.generateMessageClass(protobufSchema, schemaId);
         generatedMessageClasses.put(schemaId, messageClass);
-        PbFormatConfig pbFormatConfig = new PbFormatConfig(messageClass.getName(), ignoreParseErrors, readDefaultValues, null);
+        PbFormatConfig pbFormatConfig =
+                new PbFormatConfig(
+                        messageClass.getName(), ignoreParseErrors, readDefaultValues, null);
         try {
-            ProtoToRowConverter protoToRowConverter = new ProtoToRowConverter(
-                    rowType,
-                    pbFormatConfig);
+            ProtoToRowConverter protoToRowConverter =
+                    new ProtoToRowConverter(rowType, pbFormatConfig);
             protoToRowConverters.put(schemaId, protoToRowConverter);
             return protoToRowConverter;
         } catch (Exception e) {
             throw new RuntimeException("Could not create ProtoToRowConverter", e);
         }
     }
-
 }

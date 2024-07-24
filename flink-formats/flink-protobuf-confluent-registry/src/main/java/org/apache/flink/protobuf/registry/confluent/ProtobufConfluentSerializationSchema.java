@@ -21,4 +21,5 @@ package org.apache.flink.protobuf.registry.confluent;
 import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.table.data.RowData;
 
-public interface ProtobufConfluentSerializationSchema extends SerializationSchema<RowData>, MutableRowTypeSchema {}
+public interface ProtobufConfluentSerializationSchema
+        extends SerializationSchema<RowData>, MutableRowTypeSchema {}

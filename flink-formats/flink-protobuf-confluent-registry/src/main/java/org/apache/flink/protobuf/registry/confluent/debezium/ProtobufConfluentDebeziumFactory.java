@@ -18,9 +18,6 @@
 
 package org.apache.flink.protobuf.registry.confluent.debezium;
 
-import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
-import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
-
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.configuration.ConfigOption;
@@ -42,12 +39,15 @@ import org.apache.flink.table.factories.SerializationFormatFactory;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.types.RowKind;
 
+import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+
 import java.util.Set;
 
 import static org.apache.flink.protobuf.registry.confluent.ProtobufConfluentFormatOptions.URL;
 
-public class ProtobufConfluentDebeziumFactory implements
-        DeserializationFormatFactory, SerializationFormatFactory {
+public class ProtobufConfluentDebeziumFactory
+        implements DeserializationFormatFactory, SerializationFormatFactory {
 
     public static final String IDENTIFIER = "protobuf-confluent-debezium";
 
@@ -57,7 +57,8 @@ public class ProtobufConfluentDebeziumFactory implements
         FactoryUtil.validateFactoryOptions(this, formatOptions);
 
         String schemaRegistryURL = formatOptions.get(URL);
-        SchemaRegistryClient schemaRegistryClient = ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
+        SchemaRegistryClient schemaRegistryClient =
+                ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
 
         return new ProjectableDecodingFormat<DeserializationSchema<RowData>>() {
             @Override
@@ -65,14 +66,14 @@ public class ProtobufConfluentDebeziumFactory implements
                     DynamicTableSource.Context context,
                     DataType producedDataType,
                     int[][] projections) {
-                ProtoRegistryDynamicDeserializationSchema wrappedDeser = ProtobufConfluentFormatFactoryUtils.createDynamicDeserializationSchema(
-                        context,
-                        producedDataType,
-                        projections,
-                        schemaRegistryClient,
-                        schemaRegistryURL,
-                        formatOptions
-                );
+                ProtoRegistryDynamicDeserializationSchema wrappedDeser =
+                        ProtobufConfluentFormatFactoryUtils.createDynamicDeserializationSchema(
+                                context,
+                                producedDataType,
+                                projections,
+                                schemaRegistryClient,
+                                schemaRegistryURL,
+                                formatOptions);
                 return new ProtobufConfluentDebeziumDeserializationSchema(wrappedDeser);
             }
 
@@ -92,21 +93,23 @@ public class ProtobufConfluentDebeziumFactory implements
     public EncodingFormat<SerializationSchema<RowData>> createEncodingFormat(
             DynamicTableFactory.Context context, ReadableConfig formatOptions) {
         FactoryUtil.validateFactoryOptions(this, formatOptions);
-        ProtobufConfluentFormatFactoryUtils.validateDynamicEncodingOptions(formatOptions, IDENTIFIER);
+        ProtobufConfluentFormatFactoryUtils.validateDynamicEncodingOptions(
+                formatOptions, IDENTIFIER);
 
         String schemaRegistryURL = formatOptions.get(URL);
-        CachedSchemaRegistryClient schemaRegistryClient = ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
+        CachedSchemaRegistryClient schemaRegistryClient =
+                ProtobufConfluentFormatFactoryUtils.createCachedSchemaRegistryClient(formatOptions);
 
         return new EncodingFormat<SerializationSchema<RowData>>() {
             @Override
             public SerializationSchema<RowData> createRuntimeEncoder(
                     DynamicTableSink.Context context, DataType consumedDataType) {
-                ProtoRegistryDynamicSerializationSchema wrappedSer = ProtobufConfluentFormatFactoryUtils.createDynamicSerializationSchema(
-                        consumedDataType,
-                        schemaRegistryClient,
-                        schemaRegistryURL,
-                        formatOptions
-                );
+                ProtoRegistryDynamicSerializationSchema wrappedSer =
+                        ProtobufConfluentFormatFactoryUtils.createDynamicSerializationSchema(
+                                consumedDataType,
+                                schemaRegistryClient,
+                                schemaRegistryURL,
+                                formatOptions);
                 return new ProtobufConfluentDebeziumSerializationSchema(wrappedSer);
             }
 

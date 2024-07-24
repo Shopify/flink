@@ -45,7 +45,8 @@ public class ProtobufConfluentDebeziumSerializationSchema implements Serializati
     public ProtobufConfluentDebeziumSerializationSchema(
             ProtobufConfluentSerializationSchema protobufConfluentSerializationSchema) {
         this.protobufConfluentSerializationSchema = protobufConfluentSerializationSchema;
-        ProtobufConfluentDebeziumDeserializationSchema.updateRowType(protobufConfluentSerializationSchema);
+        ProtobufConfluentDebeziumDeserializationSchema.updateRowType(
+                protobufConfluentSerializationSchema);
     }
 
     @Override

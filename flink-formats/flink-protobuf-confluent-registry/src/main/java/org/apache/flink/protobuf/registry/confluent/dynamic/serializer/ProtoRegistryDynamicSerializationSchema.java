@@ -18,10 +18,6 @@
 
 package org.apache.flink.protobuf.registry.confluent.dynamic.serializer;
 
-import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
-import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
-
 import org.apache.flink.formats.protobuf.PbFormatConfig;
 import org.apache.flink.formats.protobuf.serialize.MessageSerializer;
 import org.apache.flink.formats.protobuf.serialize.RowToProtoConverter;
@@ -31,6 +27,10 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.FlinkRuntimeException;
 
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
+import io.confluent.kafka.serializers.protobuf.KafkaProtobufSerializer;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,7 +38,8 @@ import java.util.Map;
  * Serialization schema that dynamically serializes RowData into Confluent Protobuf messages and
  * registers the schemas in the Confluent registry.
  */
-public class ProtoRegistryDynamicSerializationSchema implements ProtobufConfluentSerializationSchema {
+public class ProtoRegistryDynamicSerializationSchema
+        implements ProtobufConfluentSerializationSchema {
     private static final long serialVersionUID = 1L;
 
     private static final String PROTOBUF_OUTER_CLASS_NAME_SUFFIX = "OuterClass";
@@ -80,8 +81,10 @@ public class ProtoRegistryDynamicSerializationSchema implements ProtobufConfluen
     public void open(InitializationContext context) throws Exception {
         Class generatedClass = generateProtoClassForRowType();
         KafkaProtobufSerializer kafkaProtobufSerializer = createKafkaSerializer();
-        MessageSerializer messageSerializer = new ConfluentMessageSerializer(kafkaProtobufSerializer, subjectName);
-        PbFormatConfig formatConfig = new PbFormatConfig(generatedClass.getName(), false, true, null);
+        MessageSerializer messageSerializer =
+                new ConfluentMessageSerializer(kafkaProtobufSerializer, subjectName);
+        PbFormatConfig formatConfig =
+                new PbFormatConfig(generatedClass.getName(), false, true, null);
         rowToProtoConverter = new RowToProtoConverter(rowType, formatConfig, messageSerializer);
     }
 
@@ -96,9 +99,8 @@ public class ProtoRegistryDynamicSerializationSchema implements ProtobufConfluen
     }
 
     private Class generateProtoClassForRowType() throws Exception {
-        RowToProtobufSchemaConverter rowToProtobufSchemaConverter = new RowToProtobufSchemaConverter(
-                generatedPackageName, generatedClassName, rowType
-        );
+        RowToProtobufSchemaConverter rowToProtobufSchemaConverter =
+                new RowToProtobufSchemaConverter(generatedPackageName, generatedClassName, rowType);
 
         ProtobufSchema protoSchema = rowToProtobufSchemaConverter.convert();
         ProtoCompiler protoCompiler = new ProtoCompiler(PROTOBUF_OUTER_CLASS_NAME_SUFFIX);

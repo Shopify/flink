@@ -18,11 +18,6 @@
 
 package org.apache.flink.protobuf.registry.confluent;
 
-import io.confluent.kafka.schemaregistry.SchemaProvider;
-import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
-import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
-import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaProvider;
-
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ReadableConfig;
@@ -34,6 +29,11 @@ import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
+
+import io.confluent.kafka.schemaregistry.SchemaProvider;
+import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaProvider;
 
 import javax.annotation.Nullable;
 
@@ -72,8 +72,7 @@ public class ProtobufConfluentFormatFactoryUtils {
             int[][] projections,
             SchemaRegistryClient schemaRegistryClient,
             String schemaRegistryURL,
-            ReadableConfig formatOptions
-    ) {
+            ReadableConfig formatOptions) {
         producedDataType = Projection.of(projections).project(producedDataType);
         final RowType rowType = (RowType) producedDataType.getLogicalType();
         final TypeInformation<RowData> rowDataTypeInfo =
@@ -91,8 +90,7 @@ public class ProtobufConfluentFormatFactoryUtils {
             DataType consumedDataType,
             SchemaRegistryClient schemaRegistryClient,
             String schemaRegistryURL,
-            ReadableConfig formatOptions
-    ) {
+            ReadableConfig formatOptions) {
         final RowType rowType = (RowType) consumedDataType.getLogicalType();
         return new ProtoRegistryDynamicSerializationSchema(
                 formatOptions.get(PACKAGE_NAME),
@@ -152,7 +150,8 @@ public class ProtobufConfluentFormatFactoryUtils {
                 .collect(Collectors.toSet());
     }
 
-    public static void validateDynamicEncodingOptions(ReadableConfig formatOptions, String identifier) {
+    public static void validateDynamicEncodingOptions(
+            ReadableConfig formatOptions, String identifier) {
         List<ConfigOption> requiredOptions = new ArrayList<>();
         requiredOptions.add(SUBJECT);
         requiredOptions.add(MESSAGE_NAME);
@@ -168,7 +167,8 @@ public class ProtobufConfluentFormatFactoryUtils {
         }
     }
 
-    public static CachedSchemaRegistryClient createCachedSchemaRegistryClient(ReadableConfig formatOptions) {
+    public static CachedSchemaRegistryClient createCachedSchemaRegistryClient(
+            ReadableConfig formatOptions) {
         String schemaRegistryURL = formatOptions.get(URL);
         List<SchemaProvider> providers = new ArrayList<>();
         providers.add(new ProtobufSchemaProvider());

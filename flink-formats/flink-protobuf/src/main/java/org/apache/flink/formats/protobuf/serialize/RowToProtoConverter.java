@@ -60,7 +60,8 @@ public class RowToProtoConverter {
         this(rowType, formatConfig, new BaseMessageSerializer());
     }
 
-    public RowToProtoConverter(RowType rowType, PbFormatConfig formatConfig, MessageSerializer messageSerializer)
+    public RowToProtoConverter(
+            RowType rowType, PbFormatConfig formatConfig, MessageSerializer messageSerializer)
             throws PbCodegenException {
         this.messageSerializer = messageSerializer;
         try {

@@ -18,13 +18,12 @@
 
 package org.apache.flink.protobuf.registry.confluent;
 
-import com.google.protobuf.ByteString;
+import org.apache.flink.table.types.logical.RowType;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.serializers.protobuf.KafkaProtobufDeserializer;
-
-import org.apache.flink.table.types.logical.RowType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,13 +33,14 @@ import java.util.Map;
 
 public class TestUtils {
 
-    static public final String TEST_STRING = "test";
-    static public final int TEST_INT = 42;
-    static public final long TEST_LONG = 99L;
-    static public final float TEST_FLOAT = 3.14f;
-    static public final double TEST_DOUBLE = 2.71828;
-    static public final boolean TEST_BOOL = true;
-    static public final ByteString TEST_BYTES = ByteString.copyFrom(new byte[] {0x01, 0x02, 0x03, 0x04});
+    public static final String TEST_STRING = "test";
+    public static final int TEST_INT = 42;
+    public static final long TEST_LONG = 99L;
+    public static final float TEST_FLOAT = 3.14f;
+    public static final double TEST_DOUBLE = 2.71828;
+    public static final boolean TEST_BOOL = true;
+    public static final ByteString TEST_BYTES =
+            ByteString.copyFrom(new byte[] {0x01, 0x02, 0x03, 0x04});
 
     public static final String STRING_FIELD = "string";
     public static final String INT_FIELD = "int";
@@ -56,10 +56,10 @@ public class TestUtils {
     public static final String SECONDS_FIELD = "seconds";
     public static final String NANOS_FIELD = "nanos";
 
-    static public final String DEFAULT_PACKAGE = "org.apache.flink.formats.protobuf.proto";
-    static public final int DEFAULT_SCHEMA_ID = 1;
-    static public final String DEFAULT_CLASS_SUFFIX = "123";
-    static public final String DEFAULT_CLASS_NAME = "TestClass";
+    public static final String DEFAULT_PACKAGE = "org.apache.flink.formats.protobuf.proto";
+    public static final int DEFAULT_SCHEMA_ID = 1;
+    public static final String DEFAULT_CLASS_SUFFIX = "123";
+    public static final String DEFAULT_CLASS_NAME = "TestClass";
     public static final String DUMMY_SCHEMA_REGISTRY_URL = "http://registry:8081";
     public static final String FAKE_TOPIC = "fake-topic";
     public static final String FAKE_SUBJECT = "fake-subject";
@@ -72,11 +72,12 @@ public class TestUtils {
         return new RowType(fieldList);
     }
 
-    public static Message parseBytesToMessage(byte[] bytes, SchemaRegistryClient mockSchemaRegistryClient) {
+    public static Message parseBytesToMessage(
+            byte[] bytes, SchemaRegistryClient mockSchemaRegistryClient) {
         Map<String, String> opts = new HashMap<>();
         opts.put("schema.registry.url", DUMMY_SCHEMA_REGISTRY_URL);
-        KafkaProtobufDeserializer deser = new KafkaProtobufDeserializer(mockSchemaRegistryClient, opts);
+        KafkaProtobufDeserializer deser =
+                new KafkaProtobufDeserializer(mockSchemaRegistryClient, opts);
         return deser.deserialize(null, bytes);
     }
-
 }

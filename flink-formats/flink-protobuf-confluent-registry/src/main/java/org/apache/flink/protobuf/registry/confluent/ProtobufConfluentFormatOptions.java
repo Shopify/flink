@@ -72,7 +72,6 @@ public class ProtobufConfluentFormatOptions {
                             "The package name of the protobuf descriptor that will be generated at "
                                     + "runtime, and used during serialization.");
 
-
     public static final ConfigOption<String> WRITE_NULL_STRING_LITERAL =
             ConfigOptions.key("serializer.write-null-string-literal")
                     .stringType()

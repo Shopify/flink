@@ -18,10 +18,6 @@
 
 package org.apache.flink.protobuf.registry.confluent.debezium;
 
-import com.google.protobuf.Descriptors;
-import com.google.protobuf.DynamicMessage;
-import com.google.protobuf.Message;
-
 import org.apache.flink.protobuf.registry.confluent.TestUtils;
 import org.apache.flink.protobuf.registry.confluent.dynamic.serializer.ProtoRegistryDynamicSerializationSchema;
 import org.apache.flink.table.data.GenericRowData;
@@ -31,6 +27,9 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.types.RowKind;
 
+import com.google.protobuf.Descriptors;
+import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,21 +47,25 @@ public class ProtobufConfluentDebeziumSerializationSchemaTest {
     private String className;
     private ProtobufConfluentDebeziumSerializationSchema ser;
     private GenericRowData rowData;
-    private final static String AFTER_FIELD = "after";
-    private final static String BEFORE_FIELD = "before";
-    private final static String OP_FIELD = "op";
+    private static final String AFTER_FIELD = "after";
+    private static final String BEFORE_FIELD = "before";
+    private static final String OP_FIELD = "op";
 
     @BeforeEach
     public void setup() throws Exception {
         mockSchemaRegistryClient = new MockSchemaRegistryClient();
         className = TestUtils.DEFAULT_CLASS_NAME + UUID.randomUUID().toString().replace("-", "");
-        RowType rowType = TestUtils.createRowType(
-                new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType())
-        );
-        ProtoRegistryDynamicSerializationSchema wrappedSer = new ProtoRegistryDynamicSerializationSchema(
-                TestUtils.DEFAULT_PACKAGE, className, rowType,
-                FAKE_SUBJECT, mockSchemaRegistryClient,
-                DUMMY_SCHEMA_REGISTRY_URL);
+        RowType rowType =
+                TestUtils.createRowType(
+                        new RowType.RowField(TestUtils.STRING_FIELD, new VarCharType()));
+        ProtoRegistryDynamicSerializationSchema wrappedSer =
+                new ProtoRegistryDynamicSerializationSchema(
+                        TestUtils.DEFAULT_PACKAGE,
+                        className,
+                        rowType,
+                        FAKE_SUBJECT,
+                        mockSchemaRegistryClient,
+                        DUMMY_SCHEMA_REGISTRY_URL);
         ser = new ProtobufConfluentDebeziumSerializationSchema(wrappedSer);
         ser.open(null);
         rowData = new GenericRowData(1);
@@ -74,7 +77,6 @@ public class ProtobufConfluentDebeziumSerializationSchemaTest {
 
         rowData.setRowKind(RowKind.INSERT);
         runCreateTest(rowData);
-
     }
 
     @Test
@@ -82,7 +84,6 @@ public class ProtobufConfluentDebeziumSerializationSchemaTest {
 
         rowData.setRowKind(RowKind.DELETE);
         runDeleteTest(rowData);
-
     }
 
     @Test
@@ -90,7 +91,6 @@ public class ProtobufConfluentDebeziumSerializationSchemaTest {
 
         rowData.setRowKind(RowKind.UPDATE_AFTER);
         runCreateTest(rowData);
-
     }
 
     @Test
@@ -98,36 +98,47 @@ public class ProtobufConfluentDebeziumSerializationSchemaTest {
 
         rowData.setRowKind(RowKind.UPDATE_BEFORE);
         runDeleteTest(rowData);
-
     }
 
     private void runCreateTest(RowData rowData) {
         byte[] actualBytes = ser.serialize(rowData);
 
         Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
-        Descriptors.FieldDescriptor opField = message.getDescriptorForType().findFieldByName(OP_FIELD);
-        Descriptors.FieldDescriptor afterField = message.getDescriptorForType().findFieldByName(AFTER_FIELD);
-        Descriptors.FieldDescriptor beforeField = message.getDescriptorForType().findFieldByName(BEFORE_FIELD);
+        Descriptors.FieldDescriptor opField =
+                message.getDescriptorForType().findFieldByName(OP_FIELD);
+        Descriptors.FieldDescriptor afterField =
+                message.getDescriptorForType().findFieldByName(AFTER_FIELD);
+        Descriptors.FieldDescriptor beforeField =
+                message.getDescriptorForType().findFieldByName(BEFORE_FIELD);
         DynamicMessage afterMessage = (DynamicMessage) message.getField(afterField);
-        Descriptors.FieldDescriptor stringField = afterMessage.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
+        Descriptors.FieldDescriptor stringField =
+                afterMessage.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
 
         Assertions.assertFalse(message.hasField(beforeField));
         Assertions.assertEquals(TestUtils.TEST_STRING, afterMessage.getField(stringField));
-        Assertions.assertEquals(ProtobufConfluentDebeziumDeserializationSchema.OP_CREATE, message.getField(opField));
+        Assertions.assertEquals(
+                ProtobufConfluentDebeziumDeserializationSchema.OP_CREATE,
+                message.getField(opField));
     }
 
     private void runDeleteTest(RowData rowData) {
         byte[] actualBytes = ser.serialize(rowData);
 
         Message message = parseBytesToMessage(actualBytes, mockSchemaRegistryClient);
-        Descriptors.FieldDescriptor opField = message.getDescriptorForType().findFieldByName(OP_FIELD);
-        Descriptors.FieldDescriptor afterField = message.getDescriptorForType().findFieldByName(AFTER_FIELD);
-        Descriptors.FieldDescriptor beforeField = message.getDescriptorForType().findFieldByName(BEFORE_FIELD);
+        Descriptors.FieldDescriptor opField =
+                message.getDescriptorForType().findFieldByName(OP_FIELD);
+        Descriptors.FieldDescriptor afterField =
+                message.getDescriptorForType().findFieldByName(AFTER_FIELD);
+        Descriptors.FieldDescriptor beforeField =
+                message.getDescriptorForType().findFieldByName(BEFORE_FIELD);
         DynamicMessage beforeMessage = (DynamicMessage) message.getField(beforeField);
-        Descriptors.FieldDescriptor stringField = beforeMessage.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
+        Descriptors.FieldDescriptor stringField =
+                beforeMessage.getDescriptorForType().findFieldByName(TestUtils.STRING_FIELD);
 
         Assertions.assertFalse(message.hasField(afterField));
         Assertions.assertEquals(TestUtils.TEST_STRING, beforeMessage.getField(stringField));
-        Assertions.assertEquals(ProtobufConfluentDebeziumDeserializationSchema.OP_DELETE, message.getField(opField));
+        Assertions.assertEquals(
+                ProtobufConfluentDebeziumDeserializationSchema.OP_DELETE,
+                message.getField(opField));
     }
 }
