@@ -91,7 +91,8 @@ public class CompileTestHandler
     private static CompileTestResponseBody toResponseBody(TestCompileResponse response) {
         return new CompileTestResponseBody(
                 response.getContractVersion(),
-                response.getSessionStatements(),
+                response.getConfigStatements(),
+                response.getPipelineStatements(),
                 response.getQuerySql(),
                 response.getWarnings(),
                 response.getMocks().stream()

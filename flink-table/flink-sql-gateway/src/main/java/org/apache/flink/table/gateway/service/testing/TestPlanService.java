@@ -116,8 +116,8 @@ public class TestPlanService {
             boolean hasTemporal = containsTemporalJoin(explainPlan);
 
             // Phase 5: Determine needed views (between mocks and target).
-            List<String> neededStatements =
-                    computeNeededStatements(normalizedTarget, mockTargetSet, pipeline);
+            List<String> pipelineStatements =
+                    computeNeededViewStatements(normalizedTarget, mockTargetSet, pipeline);
 
             // Phase 6: Build mock specs.
             List<TestMockSpec> mocks = new ArrayList<>();
@@ -159,7 +159,8 @@ public class TestPlanService {
             // Build response.
             return new TestCompileResponse(
                     TestingApi.CONTRACT_VERSION,
-                    neededStatements,
+                    pipeline.configStatements,
+                    pipelineStatements,
                     "SELECT * FROM " + quoteId(normalizedTarget),
                     warnings,
                     mocks);
@@ -177,55 +178,57 @@ public class TestPlanService {
     // -------------------------------------------------------------------------
 
     /**
-     * Loads all pipeline statements into the session and classifies them using Flink's own catalog
-     * introspection. No SQL text parsing is needed for classification — SHOW TABLES and SHOW VIEWS
-     * tell us exactly what Flink created.
+     * Loads all pipeline statements into the session and classifies them by diffing the catalog
+     * before and after each statement. This uses only Flink's catalog APIs — no SQL text parsing
+     * needed for classification.
      */
     private PipelineInfo loadPipeline(Session session, List<String> statements) {
-        List<String> allStatements = new ArrayList<>();
-
-        // Execute all statements in pipeline order.
-        for (String sql : statements) {
-            String trimmed = sql.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            configureSession(session, trimmed);
-            allStatements.add(trimmed);
-        }
-
-        // Query the catalog to see what was created.
-        Set<String> catalogTables = fetchNames(session, "SHOW TABLES");
-        Set<String> catalogViews = fetchNames(session, "SHOW VIEWS");
-
-        // Match each statement to a catalog object by extracting its name.
         Map<String, String> allObjects = new LinkedHashMap<>();
         Map<String, String> tables = new LinkedHashMap<>();
         Map<String, String> views = new LinkedHashMap<>();
         List<String> configStatements = new ArrayList<>();
 
-        for (String stmt : allStatements) {
-            String name = extractObjectName(stmt);
-            if (name != null) {
-                String normalized = normalizeId(name);
-                if (catalogViews.contains(normalized)) {
-                    views.put(normalized, stmt);
-                    allObjects.put(normalized, stmt);
-                } else if (catalogTables.contains(normalized)) {
-                    tables.put(normalized, stmt);
-                    allObjects.put(normalized, stmt);
-                } else {
-                    configStatements.add(stmt);
-                }
+        for (String sql : statements) {
+            String trimmed = sql.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+
+            // Snapshot catalog state before this statement.
+            Set<String> tablesBefore = fetchNames(session, "SHOW TABLES");
+            Set<String> viewsBefore = fetchNames(session, "SHOW VIEWS");
+
+            configureSession(session, trimmed);
+
+            // Diff catalog state to classify the statement.
+            Set<String> tablesAfter = fetchNames(session, "SHOW TABLES");
+            Set<String> viewsAfter = fetchNames(session, "SHOW VIEWS");
+
+            Set<String> newViews = new LinkedHashSet<>(viewsAfter);
+            newViews.removeAll(viewsBefore);
+
+            Set<String> newTables = new LinkedHashSet<>(tablesAfter);
+            newTables.removeAll(tablesBefore);
+            newTables.removeAll(newViews); // SHOW TABLES includes views; remove them.
+
+            if (!newViews.isEmpty()) {
+                String name = newViews.iterator().next();
+                views.put(name, trimmed);
+                allObjects.put(name, trimmed);
+            } else if (!newTables.isEmpty()) {
+                String name = newTables.iterator().next();
+                tables.put(name, trimmed);
+                allObjects.put(name, trimmed);
             } else {
-                configStatements.add(stmt);
+                // No new catalog objects — this is a config statement (SET, CREATE FUNCTION, etc.)
+                configStatements.add(trimmed);
             }
         }
 
         return new PipelineInfo(allObjects, tables, views, configStatements);
     }
 
-    /** Execute a SHOW command and return the names as a set. */
+    /** Execute a SHOW command and return the names as a normalized set. */
     private Set<String> fetchNames(Session session, String showCommand) {
         Set<String> names = new LinkedHashSet<>();
         ResultSet result = executeAndFetch(session, showCommand);
@@ -292,17 +295,15 @@ public class TestPlanService {
     // -------------------------------------------------------------------------
 
     /**
-     * Computes the ordered list of DDL statements the CLI needs to register after creating mocks.
-     * This includes config statements and view DDL for views between mock boundaries and the target.
+     * Computes the ordered list of view DDL statements the CLI needs to register after creating
+     * mocks. Only includes views between mock boundaries and the target, in pipeline order.
      */
-    private List<String> computeNeededStatements(
+    private List<String> computeNeededViewStatements(
             String target, Set<String> mockTargets, PipelineInfo pipeline) {
-        // Collect views needed between mocks and target.
         Set<String> neededViews = new LinkedHashSet<>();
         collectNeededViews(target, mockTargets, pipeline, neededViews, new LinkedHashSet<>());
 
-        // Build ordered list: config statements first, then needed view DDL in pipeline order.
-        List<String> result = new ArrayList<>(pipeline.configStatements);
+        List<String> result = new ArrayList<>();
         for (Map.Entry<String, String> entry : pipeline.views.entrySet()) {
             if (neededViews.contains(entry.getKey())) {
                 result.add(entry.getValue());
@@ -476,76 +477,6 @@ public class TestPlanService {
             cleaned = cleaned.substring(0, notNullIdx).trim();
         }
         return cleaned;
-    }
-
-    /**
-     * Extract the object name from a CREATE TABLE/VIEW statement. Handles backtick-quoted and
-     * plain identifiers, including fully-qualified names (extracts the last part).
-     *
-     * <p>Uses specific patterns to find the keyword position, avoiding false matches on TABLE/VIEW
-     * keywords that appear in the query body (e.g., FROM TABLE(TUMBLE(...))).
-     */
-    static String extractObjectName(String ddl) {
-        String upper = ddl.toUpperCase().trim();
-        // Search for CREATE [TEMPORARY] TABLE or CREATE [TEMPORARY] VIEW.
-        int pos = -1;
-        for (String pattern :
-                new String[] {
-                    "CREATE TEMPORARY VIEW ",
-                    "CREATE TEMPORARY TABLE ",
-                    "CREATE VIEW ",
-                    "CREATE TABLE "
-                }) {
-            int idx = upper.indexOf(pattern);
-            if (idx >= 0) {
-                pos = idx + pattern.length();
-                break;
-            }
-        }
-        if (pos < 0) {
-            return null;
-        }
-
-        // Skip whitespace and optional IF NOT EXISTS / IF EXISTS.
-        String rest = ddl.substring(pos).trim();
-        if (rest.toUpperCase().startsWith("IF NOT EXISTS")) {
-            rest = rest.substring("IF NOT EXISTS".length()).trim();
-        } else if (rest.toUpperCase().startsWith("IF EXISTS")) {
-            rest = rest.substring("IF EXISTS".length()).trim();
-        }
-
-        // Extract the identifier (possibly dot-separated, possibly quoted).
-        StringBuilder name = new StringBuilder();
-        int i = 0;
-        while (i < rest.length()) {
-            char c = rest.charAt(i);
-            if (c == '`') {
-                // Backtick-quoted identifier.
-                i++;
-                while (i < rest.length() && rest.charAt(i) != '`') {
-                    name.append(rest.charAt(i));
-                    i++;
-                }
-                i++; // skip closing backtick
-            } else if (c == '"') {
-                i++;
-                while (i < rest.length() && rest.charAt(i) != '"') {
-                    name.append(rest.charAt(i));
-                    i++;
-                }
-                i++;
-            } else if (c == '.') {
-                // Dot separator in qualified name — reset to take the last part.
-                name.setLength(0);
-                i++;
-            } else if (Character.isLetterOrDigit(c) || c == '_' || c == '-') {
-                name.append(c);
-                i++;
-            } else {
-                break; // Hit space, paren, or other delimiter.
-            }
-        }
-        return name.length() > 0 ? name.toString() : null;
     }
 
     // -------------------------------------------------------------------------

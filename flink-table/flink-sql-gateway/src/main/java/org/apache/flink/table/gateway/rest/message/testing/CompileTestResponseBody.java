@@ -33,7 +33,8 @@ import java.util.List;
 public class CompileTestResponseBody implements ResponseBody {
 
     private static final String FIELD_CONTRACT_VERSION = "contract_version";
-    private static final String FIELD_SESSION_STATEMENTS = "session_statements";
+    private static final String FIELD_CONFIG_STATEMENTS = "config_statements";
+    private static final String FIELD_PIPELINE_STATEMENTS = "pipeline_statements";
     private static final String FIELD_QUERY_SQL = "query_sql";
     private static final String FIELD_WARNINGS = "warnings";
     private static final String FIELD_MOCKS = "mocks";
@@ -41,8 +42,11 @@ public class CompileTestResponseBody implements ResponseBody {
     @JsonProperty(FIELD_CONTRACT_VERSION)
     private final String contractVersion;
 
-    @JsonProperty(FIELD_SESSION_STATEMENTS)
-    private final List<String> sessionStatements;
+    @JsonProperty(FIELD_CONFIG_STATEMENTS)
+    private final List<String> configStatements;
+
+    @JsonProperty(FIELD_PIPELINE_STATEMENTS)
+    private final List<String> pipelineStatements;
 
     @JsonProperty(FIELD_QUERY_SQL)
     private final String querySql;
@@ -56,12 +60,14 @@ public class CompileTestResponseBody implements ResponseBody {
     @JsonCreator
     public CompileTestResponseBody(
             @JsonProperty(FIELD_CONTRACT_VERSION) String contractVersion,
-            @JsonProperty(FIELD_SESSION_STATEMENTS) List<String> sessionStatements,
+            @JsonProperty(FIELD_CONFIG_STATEMENTS) List<String> configStatements,
+            @JsonProperty(FIELD_PIPELINE_STATEMENTS) List<String> pipelineStatements,
             @JsonProperty(FIELD_QUERY_SQL) String querySql,
             @JsonProperty(FIELD_WARNINGS) List<String> warnings,
             @JsonProperty(FIELD_MOCKS) List<MockSpecBody> mocks) {
         this.contractVersion = contractVersion;
-        this.sessionStatements = sessionStatements;
+        this.configStatements = configStatements;
+        this.pipelineStatements = pipelineStatements;
         this.querySql = querySql;
         this.warnings = warnings;
         this.mocks = mocks;
@@ -71,8 +77,12 @@ public class CompileTestResponseBody implements ResponseBody {
         return contractVersion;
     }
 
-    public List<String> getSessionStatements() {
-        return sessionStatements;
+    public List<String> getConfigStatements() {
+        return configStatements;
+    }
+
+    public List<String> getPipelineStatements() {
+        return pipelineStatements;
     }
 
     public String getQuerySql() {
