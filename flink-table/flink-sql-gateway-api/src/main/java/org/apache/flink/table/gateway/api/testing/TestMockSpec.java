@@ -70,8 +70,10 @@ public final class TestMockSpec {
     }
 
     /**
-     * The SQL identifier the toolkit should use when creating the mock object. Matches the original
-     * pipeline object name so downstream views can reference it.
+     * The SQL identifier the toolkit should use when creating the mock object. For v1 (top-level
+     * targets only), this matches {@code requestedName}. For v2 with CTE targeting, this may differ
+     * — e.g., a CTE mock like {@code charges_view.base_deduped} would need a dot-free session
+     * identifier.
      */
     public String getSessionObject() {
         return sessionObject;
