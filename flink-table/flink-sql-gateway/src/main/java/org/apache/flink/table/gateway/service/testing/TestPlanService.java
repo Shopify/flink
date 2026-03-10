@@ -230,7 +230,7 @@ public class TestPlanService {
         ResultSet result = executeAndFetch(session, "DESCRIBE " + quoteId(objectName));
         for (org.apache.flink.table.data.RowData row : result.getData()) {
             String colName = row.getString(0).toString();
-            String colType = row.getString(1).toString();
+            String colType = cleanType(row.getString(1).toString());
             String watermark = row.isNullAt(5) ? null : row.getString(5).toString();
 
             columns.add(new TestSchemaColumn(colName, colType));
@@ -438,6 +438,27 @@ public class TestPlanService {
 
     private static String quoteId(String name) {
         return "`" + name.replace("`", "``") + "`";
+    }
+
+    /**
+     * Clean a Flink type string from DESCRIBE output for use in CAST expressions. Removes
+     * annotations like {@code *ROWTIME*}, {@code NOT NULL}, and {@code METADATA FROM}.
+     */
+    static String cleanType(String type) {
+        String cleaned = type;
+        // Remove *ROWTIME* watermark marker.
+        cleaned = cleaned.replace("*ROWTIME*", "").trim();
+        // Remove METADATA FROM clause.
+        int metaIdx = cleaned.toUpperCase().indexOf(" METADATA");
+        if (metaIdx > 0) {
+            cleaned = cleaned.substring(0, metaIdx).trim();
+        }
+        // Remove NOT NULL constraint (mocks allow nulls).
+        int notNullIdx = cleaned.toUpperCase().indexOf(" NOT NULL");
+        if (notNullIdx > 0) {
+            cleaned = cleaned.substring(0, notNullIdx).trim();
+        }
+        return cleaned;
     }
 
     /**
