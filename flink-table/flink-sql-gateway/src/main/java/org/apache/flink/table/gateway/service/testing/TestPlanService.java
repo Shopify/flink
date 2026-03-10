@@ -249,9 +249,19 @@ public class TestPlanService {
 
         ResultSet result = executeAndFetch(session, "DESCRIBE " + quoteId(objectName));
         for (org.apache.flink.table.data.RowData row : result.getData()) {
+            int arity = row.getArity();
+            if (arity < 2) {
+                LOG.warn("DESCRIBE {} returned row with {} columns, expected at least 2", objectName, arity);
+                continue;
+            }
             String colName = row.getString(0).toString();
             String colType = cleanType(row.getString(1).toString());
-            String watermark = row.isNullAt(5) ? null : row.getString(5).toString();
+
+            // Watermark info is in column 5 (standard Flink DESCRIBE output).
+            String watermark = null;
+            if (arity > 5 && !row.isNullAt(5)) {
+                watermark = row.getString(5).toString();
+            }
 
             columns.add(new TestSchemaColumn(colName, colType));
             if (watermark != null && !watermark.isEmpty()) {
@@ -347,7 +357,8 @@ public class TestPlanService {
 
     /**
      * Checks if a SQL statement references an object name using word-boundary matching. Skips
-     * matches inside single-quoted string literals.
+     * matches inside single-quoted string literals, line comments ({@code --}), and block comments
+     * ({@code /* * /}).
      */
     static boolean sqlReferencesObject(String sql, String objectName) {
         String lower = sql.toLowerCase();
@@ -363,7 +374,7 @@ public class TestPlanService {
                     end >= lower.length()
                             || (!Character.isLetterOrDigit(lower.charAt(end))
                                     && lower.charAt(end) != '_');
-            if (leftOk && rightOk && !insideStringLiteral(lower, idx)) {
+            if (leftOk && rightOk && !insideStringOrComment(lower, idx)) {
                 return true;
             }
             idx = end;
@@ -371,15 +382,49 @@ public class TestPlanService {
         return false;
     }
 
-    /** Check if position is inside a single-quoted string literal. */
-    private static boolean insideStringLiteral(String sql, int position) {
-        int quotes = 0;
+    /**
+     * Check if a position in SQL text is inside a string literal, line comment, or block comment.
+     */
+    static boolean insideStringOrComment(String sql, int position) {
+        boolean inString = false;
+        boolean inLineComment = false;
+        boolean inBlockComment = false;
         for (int i = 0; i < position; i++) {
-            if (sql.charAt(i) == '\'' && (i == 0 || sql.charAt(i - 1) != '\\')) {
-                quotes++;
+            char c = sql.charAt(i);
+            char next = (i + 1 < sql.length()) ? sql.charAt(i + 1) : 0;
+
+            if (inLineComment) {
+                if (c == '\n') {
+                    inLineComment = false;
+                }
+                continue;
+            }
+            if (inBlockComment) {
+                if (c == '*' && next == '/') {
+                    inBlockComment = false;
+                    i++;
+                }
+                continue;
+            }
+            if (!inString && c == '-' && next == '-') {
+                inLineComment = true;
+                i++;
+                continue;
+            }
+            if (!inString && c == '/' && next == '*') {
+                inBlockComment = true;
+                i++;
+                continue;
+            }
+            if (c == '\'') {
+                if (inString && next == '\'') {
+                    i++; // skip SQL doubled-quote escape
+                } else {
+                    inString = !inString;
+                }
             }
         }
-        return quotes % 2 != 0;
+        return inString || inLineComment || inBlockComment;
     }
 
     // -------------------------------------------------------------------------
