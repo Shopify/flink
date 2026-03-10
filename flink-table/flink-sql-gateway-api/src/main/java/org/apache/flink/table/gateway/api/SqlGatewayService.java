@@ -37,6 +37,8 @@ import org.apache.flink.table.gateway.api.results.ResultSet;
 import org.apache.flink.table.gateway.api.results.TableInfo;
 import org.apache.flink.table.gateway.api.session.SessionEnvironment;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
+import org.apache.flink.table.gateway.api.testing.TestCompileRequest;
+import org.apache.flink.table.gateway.api.testing.TestCompileResponse;
 import org.apache.flink.table.gateway.api.utils.SqlGatewayException;
 
 import javax.annotation.Nullable;
@@ -368,4 +370,19 @@ public interface SqlGatewayService {
             @Nullable String script,
             Configuration executionConfig)
             throws SqlGatewayException;
+
+    // -------------------------------------------------------------------------
+    //  Testing API
+    // -------------------------------------------------------------------------
+
+    /**
+     * Compile a test plan for a pipeline target.
+     *
+     * <p>Loads the pipeline into an analysis session, resolves mock schemas via DESCRIBE, detects
+     * window functions and temporal joins via EXPLAIN, and returns the compiled plan.
+     *
+     * @param request the compile request
+     * @return the compiled test plan
+     */
+    TestCompileResponse compileTestPlan(TestCompileRequest request) throws SqlGatewayException;
 }

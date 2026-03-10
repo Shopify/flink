@@ -41,10 +41,13 @@ import org.apache.flink.table.gateway.api.results.ResultSet;
 import org.apache.flink.table.gateway.api.results.TableInfo;
 import org.apache.flink.table.gateway.api.session.SessionEnvironment;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
+import org.apache.flink.table.gateway.api.testing.TestCompileRequest;
+import org.apache.flink.table.gateway.api.testing.TestCompileResponse;
 import org.apache.flink.table.gateway.api.utils.SqlGatewayException;
 import org.apache.flink.table.gateway.service.operation.OperationManager;
 import org.apache.flink.table.gateway.service.session.Session;
 import org.apache.flink.table.gateway.service.session.SessionManager;
+import org.apache.flink.table.gateway.service.testing.TestPlanService;
 import org.apache.flink.table.runtime.application.SqlDriver;
 import org.apache.flink.util.StringUtils;
 
@@ -442,6 +445,23 @@ public class SqlGatewayServiceImpl implements SqlGatewayService {
         } catch (Throwable t) {
             LOG.error("Failed to get statement completion candidates.", t);
             throw new SqlGatewayException("Failed to get statement completion candidates.", t);
+        }
+    }
+
+    // --------------------------------------------------------------------------------------------
+    //  Testing API
+    // --------------------------------------------------------------------------------------------
+
+    @Override
+    public TestCompileResponse compileTestPlan(TestCompileRequest request)
+            throws SqlGatewayException {
+        try {
+            return new TestPlanService(sessionManager).compile(request);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Throwable t) {
+            LOG.error("Failed to compile test plan.", t);
+            throw new SqlGatewayException("Failed to compile test plan.", t);
         }
     }
 

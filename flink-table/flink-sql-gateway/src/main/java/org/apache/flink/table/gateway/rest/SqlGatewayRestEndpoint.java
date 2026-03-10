@@ -42,6 +42,8 @@ import org.apache.flink.table.gateway.rest.handler.session.TriggerSessionHeartbe
 import org.apache.flink.table.gateway.rest.handler.statement.CompleteStatementHandler;
 import org.apache.flink.table.gateway.rest.handler.statement.ExecuteStatementHandler;
 import org.apache.flink.table.gateway.rest.handler.statement.FetchResultsHandler;
+import org.apache.flink.table.gateway.rest.handler.testing.CompileTestHandler;
+import org.apache.flink.table.gateway.rest.handler.testing.GetTestingInfoHandler;
 import org.apache.flink.table.gateway.rest.handler.util.GetApiVersionHandler;
 import org.apache.flink.table.gateway.rest.handler.util.GetInfoHandler;
 import org.apache.flink.table.gateway.rest.header.application.DeployScriptHeaders;
@@ -61,6 +63,8 @@ import org.apache.flink.table.gateway.rest.header.session.TriggerSessionHeartbea
 import org.apache.flink.table.gateway.rest.header.statement.CompleteStatementHeaders;
 import org.apache.flink.table.gateway.rest.header.statement.ExecuteStatementHeaders;
 import org.apache.flink.table.gateway.rest.header.statement.FetchResultsHeaders;
+import org.apache.flink.table.gateway.rest.header.testing.CompileTestHeaders;
+import org.apache.flink.table.gateway.rest.header.testing.GetTestingInfoHeaders;
 import org.apache.flink.table.gateway.rest.header.util.GetApiVersionHeaders;
 import org.apache.flink.table.gateway.rest.header.util.GetInfoHeaders;
 import org.apache.flink.table.gateway.workflow.scheduler.EmbeddedQuartzScheduler;
@@ -102,6 +106,7 @@ public class SqlGatewayRestEndpoint extends RestServerEndpoint implements SqlGat
         addEmbeddedSchedulerRelatedHandlers(handlers);
         addMaterializedTableRelatedHandlers(handlers);
         addDeployScriptRelatedHandlers(handlers);
+        addTestingRelatedHandlers(handlers);
         return handlers;
     }
 
@@ -266,6 +271,19 @@ public class SqlGatewayRestEndpoint extends RestServerEndpoint implements SqlGat
                 new DeployScriptHandler(
                         service, responseHeaders, DeployScriptHeaders.getInstance());
         handlers.add(Tuple2.of(DeployScriptHeaders.getInstance(), handler));
+    }
+
+    private void addTestingRelatedHandlers(
+            List<Tuple2<RestHandlerSpecification, ChannelInboundHandler>> handlers) {
+        GetTestingInfoHandler testingInfoHandler =
+                new GetTestingInfoHandler(
+                        service, responseHeaders, GetTestingInfoHeaders.getInstance());
+        handlers.add(Tuple2.of(GetTestingInfoHeaders.getInstance(), testingInfoHandler));
+
+        CompileTestHandler compileTestHandler =
+                new CompileTestHandler(
+                        service, responseHeaders, CompileTestHeaders.getInstance());
+        handlers.add(Tuple2.of(CompileTestHeaders.getInstance(), compileTestHandler));
     }
 
     @Override

@@ -36,6 +36,8 @@ import org.apache.flink.table.gateway.api.results.ResultSet;
 import org.apache.flink.table.gateway.api.results.TableInfo;
 import org.apache.flink.table.gateway.api.session.SessionEnvironment;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
+import org.apache.flink.table.gateway.api.testing.TestCompileRequest;
+import org.apache.flink.table.gateway.api.testing.TestCompileResponse;
 
 import javax.annotation.Nullable;
 
@@ -215,6 +217,12 @@ public class MockedSqlGatewayService implements SqlGatewayService {
     @Override
     public ResolvedCatalogBaseTable<?> getTable(
             SessionHandle sessionHandle, ObjectIdentifier tableIdentifier)
+            throws SqlGatewayException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public TestCompileResponse compileTestPlan(TestCompileRequest request)
             throws SqlGatewayException {
         throw new UnsupportedOperationException();
     }
