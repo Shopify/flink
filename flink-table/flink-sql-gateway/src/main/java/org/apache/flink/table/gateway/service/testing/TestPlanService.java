@@ -129,11 +129,11 @@ public class TestPlanService {
                 boolean includeSentinel = false;
 
                 if (MODE_CHANGELOG.equals(mode) && isWindowed && info.watermarkColumn != null) {
-                    materialization = TestMockSpec.MATERIALIZATION_FILESYSTEM;
+                    materialization = "filesystem";
                     watermarkColumn = info.watermarkColumn;
                     includeSentinel = true;
                 } else {
-                    materialization = TestMockSpec.MATERIALIZATION_VIEW;
+                    materialization = "view";
                 }
 
                 mocks.add(
@@ -177,45 +177,62 @@ public class TestPlanService {
     // -------------------------------------------------------------------------
 
     /**
-     * Loads all pipeline statements into the session via configureSession. Records which objects are
-     * tables vs views and stores the original DDL for each.
+     * Loads all pipeline statements into the session and classifies them using Flink's own catalog
+     * introspection. No SQL text parsing is needed for classification — SHOW TABLES and SHOW VIEWS
+     * tell us exactly what Flink created.
      */
     private PipelineInfo loadPipeline(Session session, List<String> statements) {
-        Map<String, String> allObjects = new LinkedHashMap<>(); // name → original DDL
-        Map<String, String> tables = new LinkedHashMap<>();
-        Map<String, String> views = new LinkedHashMap<>();
-        List<String> configStatements = new ArrayList<>();
+        List<String> allStatements = new ArrayList<>();
 
+        // Execute all statements in pipeline order.
         for (String sql : statements) {
             String trimmed = sql.trim();
             if (trimmed.isEmpty()) {
                 continue;
             }
-
-            // Execute the statement to load it into the catalog.
             configureSession(session, trimmed);
+            allStatements.add(trimmed);
+        }
 
-            // Classify based on SQL text (simple prefix matching after execution).
-            String upper = trimmed.toUpperCase();
-            if (upper.startsWith("CREATE") && upper.contains("TABLE")) {
-                String name = extractObjectName(trimmed);
-                if (name != null) {
-                    tables.put(normalizeId(name), trimmed);
-                    allObjects.put(normalizeId(name), trimmed);
-                }
-            } else if (upper.startsWith("CREATE") && upper.contains("VIEW")) {
-                String name = extractObjectName(trimmed);
-                if (name != null) {
-                    views.put(normalizeId(name), trimmed);
-                    allObjects.put(normalizeId(name), trimmed);
+        // Query the catalog to see what was created.
+        Set<String> catalogTables = fetchNames(session, "SHOW TABLES");
+        Set<String> catalogViews = fetchNames(session, "SHOW VIEWS");
+
+        // Match each statement to a catalog object by extracting its name.
+        Map<String, String> allObjects = new LinkedHashMap<>();
+        Map<String, String> tables = new LinkedHashMap<>();
+        Map<String, String> views = new LinkedHashMap<>();
+        List<String> configStatements = new ArrayList<>();
+
+        for (String stmt : allStatements) {
+            String name = extractObjectName(stmt);
+            if (name != null) {
+                String normalized = normalizeId(name);
+                if (catalogViews.contains(normalized)) {
+                    views.put(normalized, stmt);
+                    allObjects.put(normalized, stmt);
+                } else if (catalogTables.contains(normalized)) {
+                    tables.put(normalized, stmt);
+                    allObjects.put(normalized, stmt);
+                } else {
+                    configStatements.add(stmt);
                 }
             } else {
-                // SET, CREATE FUNCTION, USE, etc.
-                configStatements.add(trimmed);
+                configStatements.add(stmt);
             }
         }
 
         return new PipelineInfo(allObjects, tables, views, configStatements);
+    }
+
+    /** Execute a SHOW command and return the names as a set. */
+    private Set<String> fetchNames(Session session, String showCommand) {
+        Set<String> names = new LinkedHashSet<>();
+        ResultSet result = executeAndFetch(session, showCommand);
+        for (org.apache.flink.table.data.RowData row : result.getData()) {
+            names.add(normalizeId(row.getString(0).toString()));
+        }
+        return names;
     }
 
     // -------------------------------------------------------------------------
@@ -464,15 +481,24 @@ public class TestPlanService {
     /**
      * Extract the object name from a CREATE TABLE/VIEW statement. Handles backtick-quoted and
      * plain identifiers, including fully-qualified names (extracts the last part).
+     *
+     * <p>Uses specific patterns to find the keyword position, avoiding false matches on TABLE/VIEW
+     * keywords that appear in the query body (e.g., FROM TABLE(TUMBLE(...))).
      */
     static String extractObjectName(String ddl) {
         String upper = ddl.toUpperCase().trim();
-        // Find position after TABLE or VIEW keyword.
+        // Search for CREATE [TEMPORARY] TABLE or CREATE [TEMPORARY] VIEW.
         int pos = -1;
-        for (String keyword : new String[] {"TABLE", "VIEW"}) {
-            int idx = upper.indexOf(keyword);
+        for (String pattern :
+                new String[] {
+                    "CREATE TEMPORARY VIEW ",
+                    "CREATE TEMPORARY TABLE ",
+                    "CREATE VIEW ",
+                    "CREATE TABLE "
+                }) {
+            int idx = upper.indexOf(pattern);
             if (idx >= 0) {
-                pos = idx + keyword.length();
+                pos = idx + pattern.length();
                 break;
             }
         }
