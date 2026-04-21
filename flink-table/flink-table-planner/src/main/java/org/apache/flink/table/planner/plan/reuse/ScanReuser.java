@@ -27,17 +27,17 @@ import org.apache.flink.table.connector.source.abilities.SupportsReadingMetadata
 import org.apache.flink.table.planner.calcite.FlinkContext;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.connectors.DynamicSourceUtils;
-import org.apache.flink.table.planner.plan.utils.FlinkRexUtil;
 import org.apache.flink.table.planner.plan.abilities.source.FilterPushDownSpec;
-import org.apache.flink.table.planner.plan.abilities.source.SourceAbilityContext;
 import org.apache.flink.table.planner.plan.abilities.source.ProjectPushDownSpec;
 import org.apache.flink.table.planner.plan.abilities.source.ReadingMetadataSpec;
+import org.apache.flink.table.planner.plan.abilities.source.SourceAbilityContext;
 import org.apache.flink.table.planner.plan.abilities.source.SourceAbilitySpec;
 import org.apache.flink.table.planner.plan.abilities.source.WatermarkPushDownSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.spec.DynamicTableSourceSpec;
 import org.apache.flink.table.planner.plan.nodes.physical.common.CommonPhysicalTableSourceScan;
 import org.apache.flink.table.planner.plan.rules.logical.PushProjectIntoTableSourceScanRule;
 import org.apache.flink.table.planner.plan.schema.TableSourceTable;
+import org.apache.flink.table.planner.plan.utils.FlinkRexUtil;
 import org.apache.flink.table.types.logical.RowType;
 
 import org.apache.calcite.rel.RelNode;
@@ -180,8 +180,7 @@ public class ScanReuser {
 
             // Determine if we should attempt to merge different filters (OR them).
             // Requires: config enabled + source supports filter pushdown.
-            DynamicTableSource tableSource =
-                    reusableNodes.get(0).tableSourceTable().tableSource();
+            DynamicTableSource tableSource = reusableNodes.get(0).tableSourceTable().tableSource();
             boolean mergeFilters =
                     filterReuseEnabled && tableSource instanceof SupportsFilterPushDown;
 
@@ -201,7 +200,8 @@ public class ScanReuser {
                 allMetaKeySet.addAll(metadataKeys(source));
             }
 
-            // 1.1 When merging filters, add filter-referenced columns to projection so Calc can filter.
+            // 1.1 When merging filters, add filter-referenced columns to projection so Calc can
+            // filter.
             if (mergeFilters) {
                 collectFilterReferencedColumns(reusableNodes, allProjectFieldSet);
             }
@@ -211,8 +211,7 @@ public class ScanReuser {
                     enforceMetadataKeyOrder(allMetaKeySet, pickTable.tableSource());
 
             // 2. Create new source.
-            List<SourceAbilitySpec> specs =
-                    abilitySpecsWithoutEscaped(pickTable, mergeFilters);
+            List<SourceAbilitySpec> specs = abilitySpecsWithoutEscaped(pickTable, mergeFilters);
 
             // 2.1 Create produced type.
             // The source produced type is the input type into the runtime. The format looks as:
@@ -250,8 +249,7 @@ public class ScanReuser {
 
             // 2.4 OR all per-scan filters into combined predicate for the source.
             if (mergeFilters) {
-                buildOrFilterSpec(reusableNodes, newSourceType, rexBuilder)
-                        .ifPresent(specs::add);
+                buildOrFilterSpec(reusableNodes, newSourceType, rexBuilder).ifPresent(specs::add);
             }
 
             // 2.5 Create a new ScanTableSource. ScanTableSource can not be pushed down twice.
@@ -279,9 +277,7 @@ public class ScanReuser {
                 FilterPushDownSpec filterSpec =
                         getAbilitySpec(source.abilitySpecs(), FilterPushDownSpec.class);
                 boolean hasFilter =
-                        mergeFilters
-                                && filterSpec != null
-                                && !filterSpec.getPredicates().isEmpty();
+                        mergeFilters && filterSpec != null && !filterSpec.getPredicates().isEmpty();
 
                 // Don't need add calc
                 if (Arrays.deepEquals(projectedFields, allProjectFields)
@@ -306,9 +302,12 @@ public class ScanReuser {
 
                 // Add original filter as Calc condition with remapped indices
                 if (hasFilter) {
-                    RexShuttle remap = createFieldNameRemap(
-                            physicalFieldNames(source), newScan.getRowType().getFieldNames());
-                    RexNode condition = andPredicates(filterSpec.getPredicates(), remap, rexBuilder);
+                    RexShuttle remap =
+                            createFieldNameRemap(
+                                    physicalFieldNames(source),
+                                    newScan.getRowType().getFieldNames());
+                    RexNode condition =
+                            andPredicates(filterSpec.getPredicates(), remap, rexBuilder);
                     builder.addCondition(condition);
                 }
 
@@ -324,12 +323,14 @@ public class ScanReuser {
 
     /** Add all columns referenced by the filters to the projection set. */
     private static void collectFilterReferencedColumns(
-            List<CommonPhysicalTableSourceScan> scans,
-            TreeSet<int[]> allProjectFieldSet) {
+            List<CommonPhysicalTableSourceScan> scans, TreeSet<int[]> allProjectFieldSet) {
         for (CommonPhysicalTableSourceScan scan : scans) {
             FilterPushDownSpec fs =
-                    getAbilitySpec(scan.tableSourceTable().abilitySpecs(), FilterPushDownSpec.class);
-            if (fs == null) continue;
+                    getAbilitySpec(
+                            scan.tableSourceTable().abilitySpecs(), FilterPushDownSpec.class);
+            if (fs == null) {
+                continue;
+            }
             for (RexNode pred : fs.getPredicates()) {
                 for (RexInputRef ref : FlinkRexUtil.findAllInputRefs(pred)) {
                     allProjectFieldSet.add(new int[] {ref.getIndex()});
@@ -354,13 +355,16 @@ public class ScanReuser {
         // Get on Node per table source scan
         for (CommonPhysicalTableSourceScan scan : scans) {
             FilterPushDownSpec fs =
-                    getAbilitySpec(scan.tableSourceTable().abilitySpecs(), FilterPushDownSpec.class);
+                    getAbilitySpec(
+                            scan.tableSourceTable().abilitySpecs(), FilterPushDownSpec.class);
             if (fs == null || fs.getPredicates().isEmpty()) {
                 // OR with empty filter -> no filter
                 return Optional.empty();
             }
-            RexShuttle remap = createFieldNameRemap(
-                    physicalFieldNames(scan.tableSourceTable()), newSourceType.getFieldNames());
+            RexShuttle remap =
+                    createFieldNameRemap(
+                            physicalFieldNames(scan.tableSourceTable()),
+                            newSourceType.getFieldNames());
             perScanFilters.add(andPredicates(fs.getPredicates(), remap, rexBuilder));
         }
         // todo figure out when this could happen
@@ -374,7 +378,8 @@ public class ScanReuser {
             combined = rexBuilder.makeCall(SqlStdOperatorTable.OR, combined, perScanFilters.get(i));
         }
 
-        if (!connectorAcceptsFilter(scans.get(0).tableSourceTable().tableSource(), combined, newSourceType)) {
+        if (!connectorAcceptsFilter(
+                scans.get(0).tableSourceTable().tableSource(), combined, newSourceType)) {
             // todo decide if exception thrown here instead of no filter being passed
             // could be dangerous passing no filter
             return Optional.empty();
@@ -384,8 +389,8 @@ public class ScanReuser {
     }
 
     /**
-     * Test whether the connector accepts a filter predicate by calling applyFilters on a
-     * throwaway copy. No calls to actual data-source is used.
+     * Test whether the connector accepts a filter predicate by calling applyFilters on a throwaway
+     * copy. No calls to actual data-source is used.
      */
     private boolean connectorAcceptsFilter(
             DynamicTableSource source, RexNode filter, RowType sourceType) {
@@ -399,8 +404,7 @@ public class ScanReuser {
     }
 
     /** Create a RexShuttle that remaps RexInputRef indices by matching field names. */
-    private static RexShuttle createFieldNameRemap(
-            List<String> oldNames, List<String> newNames) {
+    private static RexShuttle createFieldNameRemap(List<String> oldNames, List<String> newNames) {
         return new RexShuttle() {
             @Override
             public RexNode visitInputRef(RexInputRef ref) {
@@ -420,8 +424,12 @@ public class ScanReuser {
     /** Get physical column field names from a TableSourceTable. */
     // needed because want to remap indicies from filter predicates to our unified scan
     private static List<String> physicalFieldNames(TableSourceTable source) {
-        return ((RowType) source.contextResolvedTable().getResolvedSchema()
-                .toPhysicalRowDataType().getLogicalType()).getFieldNames();
+        return ((RowType)
+                        source.contextResolvedTable()
+                                .getResolvedSchema()
+                                .toPhysicalRowDataType()
+                                .getLogicalType())
+                .getFieldNames();
     }
 
     /** AND a list of predicates together, applying a remap shuttle to each. */
@@ -430,7 +438,9 @@ public class ScanReuser {
             List<RexNode> predicates, RexShuttle remap, RexBuilder rexBuilder) {
         RexNode result = predicates.get(0).accept(remap);
         for (int i = 1; i < predicates.size(); i++) {
-            result = rexBuilder.makeCall(SqlStdOperatorTable.AND, result, predicates.get(i).accept(remap));
+            result =
+                    rexBuilder.makeCall(
+                            SqlStdOperatorTable.AND, result, predicates.get(i).accept(remap));
         }
         return result;
     }

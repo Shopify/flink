@@ -20,6 +20,7 @@ package org.apache.flink.table.planner.plan.optimize;
 
 import org.apache.flink.table.api.StatementSet;
 import org.apache.flink.table.api.TableConfig;
+import org.apache.flink.table.api.config.OptimizerConfigOptions;
 import org.apache.flink.table.planner.utils.TableTestBase;
 import org.apache.flink.table.planner.utils.TableTestUtil;
 import org.apache.flink.testutils.junit.extensions.parameterized.ParameterizedTestExtension;
@@ -484,5 +485,242 @@ class ScanReuseTest extends TableTestBase {
         stmt.addInsertSql("INSERT INTO MySinkTs SELECT a, ts_ltz FROM MyTableWatermark");
         stmt.addInsertSql("INSERT INTO MySinkTs SELECT b, ts_ltz FROM MyTableWatermark");
         util.verifyExecPlan(stmt);
+    }
+
+    // =========================================================================
+    // Filter reuse tests
+    //
+    // These tests verify that non-filter abilities are NOT incorrectly merged
+    // when filter reuse is enabled. Each test enables the config and verifies
+    // the plan stays correct — no unintended merging of limits, partitions, etc.
+    // If a future change escapes any of these specs from the digest, these
+    // tests will catch the regression.
+    // =========================================================================
+
+    @TestTemplate
+    void testFilterReuseDifferentFiltersNotMergedWithoutConfig() {
+        // Config OFF: two scans with different pushed filters should NOT be merged.
+        // Verifies baseline behavior is preserved.
+        String sqlQuery =
+                "SELECT T1.a, T1.c, T2.c FROM"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 2) T1,"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseSameFilterDifferentProjections() {
+        // Config ON: same filter, different projections. Should merge via existing
+        // projection reuse — filter stays pushed as-is on the unified source.
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        String sqlQuery =
+                "SELECT T1.a, T1.b, T2.c FROM"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T1,"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseDifferentLimitsNotMerged() {
+        // Config ON: different limits on same table. Limits are NOT escaped from
+        // digest, so scans with different limits must remain separate.
+        // Guards against LimitPushDownSpec being accidentally escaped.
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        String sqlQuery =
+                "SELECT T1.a, T1.c, T2.c FROM"
+                        + " (SELECT * FROM MyTable LIMIT 10) T1,"
+                        + " (SELECT * FROM MyTable LIMIT 20) T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseDifferentPartitionsNotMerged() {
+        // Config ON: different partitions on same table. Partitions are NOT escaped
+        // from digest, so scans with different partitions must remain separate.
+        // Guards against PartitionPushDownSpec being accidentally escaped.
+        if (!isStreaming) {
+            util.tableEnv()
+                    .getConfig()
+                    .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+            String sqlQuery =
+                    "SELECT T1.a, T1.c, T2.c FROM"
+                            + " (SELECT * FROM"
+                            + " MyTable /*+ OPTIONS('partition-list'='c:1;c:2') */"
+                            + " WHERE c = '1') T1,"
+                            + " (SELECT * FROM"
+                            + " MyTable /*+ OPTIONS('partition-list'='c:1;c:2') */"
+                            + " WHERE c = '2') T2"
+                            + " WHERE T1.a = T2.a";
+            util.verifyExecPlan(sqlQuery);
+        }
+    }
+
+    @TestTemplate
+    void testFilterReuseDifferentHintsNotMerged() {
+        // Config ON: different OPTIONS hints on same table. Hints are included in
+        // digest, so scans with different hints must remain separate.
+        // Guards against hints being stripped when filter reuse is enabled.
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        String sqlQuery =
+                "SELECT T1.a, T1.c, T2.c FROM"
+                        + " MyTable /*+ OPTIONS('source.num-element-to-skip'='1') */ T1,"
+                        + " MyTable /*+ OPTIONS('source.num-element-to-skip'='10') */ T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseWithWatermarkPushDown() {
+        // Config ON: same table with watermark pushdown and different filters.
+        // Verifies watermark spec is correctly adjusted when filter reuse merges
+        // sources that have watermark pushdown enabled.
+        if (isStreaming) {
+            util.tableEnv()
+                    .getConfig()
+                    .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+            String ddl =
+                    "CREATE TABLE FilterWatermarkTable (\n"
+                            + "  a int,\n"
+                            + "  b bigint,\n"
+                            + "  c string,\n"
+                            + "  rtime timestamp(3),\n"
+                            + "  WATERMARK FOR rtime AS rtime - INTERVAL '5' SECOND\n"
+                            + ") WITH (\n"
+                            + " 'connector' = 'values',\n"
+                            + " 'bounded' = 'false',\n"
+                            + " 'enable-watermark-push-down' = 'true',\n"
+                            + " 'filterable-fields' = 'b',\n"
+                            + " 'disable-lookup' = 'true'"
+                            + ")";
+            util.tableEnv().executeSql(ddl);
+            String sqlQuery =
+                    "SELECT T1.a, T1.c, T2.c FROM"
+                            + " (SELECT MIN(a) as a, MIN(c) as c FROM FilterWatermarkTable"
+                            + " WHERE b = 1 GROUP BY"
+                            + " TUMBLE(rtime, INTERVAL '10' SECOND)) T1,"
+                            + " (SELECT MIN(a) as a, MIN(c) as c FROM FilterWatermarkTable"
+                            + " WHERE b = 2 GROUP BY"
+                            + " TUMBLE(rtime, INTERVAL '10' SECOND)) T2"
+                            + " WHERE T1.a = T2.a";
+            util.verifyExecPlan(sqlQuery);
+        }
+    }
+
+    @TestTemplate
+    void testFilterReuseWithMetadata() {
+        // Config ON: same table with metadata reading and different filters.
+        // Verifies metadata columns are correctly unified when filter reuse
+        // merges sources with different metadata projections.
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        String sqlQuery =
+                "SELECT T1.a, T1.metadata_1, T2.c, T2.metadata_2 FROM"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T1,"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 2) T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseConfigOffPreservesExistingBehavior() {
+        // Config OFF (default): verifies that the existing filter pushdown reuse
+        // behavior (same filter = reuse) is not affected by the presence of the
+        // config option. Same-filter scans should still reuse via SubplanReuser.
+        String sqlQuery =
+                "SELECT T1.a, T1.b, T2.c FROM"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T1,"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseThreeWayUnion() {
+        // Config ON: three-way UNION ALL with different filters. The values connector
+        // rejects OR, so scans should remain separate. Tests nested OR handling and
+        // the connector rejection fallback with 3+ legs.
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        String sqlQuery =
+                "SELECT a, b FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1"
+                        + " UNION ALL"
+                        + " SELECT a, b FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 2"
+                        + " UNION ALL"
+                        + " SELECT a, b FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 3";
+        util.verifyExecPlan(sqlQuery);
+    }
+
+    @TestTemplate
+    void testFilterReuseMultiSinkStatementSet() {
+        // Config ON: StatementSet with two INSERT statements reading from the same
+        // table with different filters. Tests cross-statement source reuse.
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        util.tableEnv()
+                .executeSql(
+                        "CREATE TABLE Sink1 (\n"
+                                + "  a int,\n"
+                                + "  b bigint\n"
+                                + ") WITH (\n"
+                                + " 'connector' = 'values',\n"
+                                + " 'table-sink-class' = 'DEFAULT'"
+                                + ")");
+        util.tableEnv()
+                .executeSql(
+                        "CREATE TABLE Sink2 (\n"
+                                + "  a int,\n"
+                                + "  c string\n"
+                                + ") WITH (\n"
+                                + " 'connector' = 'values',\n"
+                                + " 'table-sink-class' = 'DEFAULT'"
+                                + ")");
+        StatementSet stmt = util.tableEnv().createStatementSet();
+        stmt.addInsertSql(
+                "INSERT INTO Sink1 SELECT a, b FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1");
+        stmt.addInsertSql(
+                "INSERT INTO Sink2 SELECT a, c FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 2");
+        util.verifyExecPlan(stmt);
+    }
+
+    @TestTemplate
+    void testFilterReuseMixedFilterAndNoFilter() {
+        // Config ON: one leg has a pushed filter, the other has no filter.
+        // OR with "everything" = "everything", so buildOrFilterSpec should return empty.
+        // Scans should remain separate (or merge without filter pushdown).
+        util.tableEnv()
+                .getConfig()
+                .set(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_FILTER, true);
+        String sqlQuery =
+                "SELECT T1.a, T1.b, T2.c FROM"
+                        + " (SELECT * FROM"
+                        + " MyTable /*+ OPTIONS('filterable-fields'='b') */ WHERE b = 1) T1,"
+                        + " MyTable T2"
+                        + " WHERE T1.a = T2.a";
+        util.verifyExecPlan(sqlQuery);
     }
 }
