@@ -38,7 +38,6 @@ public class ReusableScanVisitor extends RelVisitor {
     private final Map<String, List<CommonPhysicalTableSourceScan>> digestToReusableScans =
             new HashMap<>();
 
-    // Todo don't love this, want to see if I can do this so getDigest gets this at constant level
     public ReusableScanVisitor(boolean escapeFilter) {
         this.escapeFilter = escapeFilter;
     }

@@ -248,8 +248,15 @@ public class ScanReuser {
             }
 
             // 2.4 OR all per-scan filters into combined predicate for the source.
+            // If the connector rejects the combined filter, skip this group entirely and revert
+            // source back to non-table reuse behaviour
             if (mergeFilters) {
-                buildOrFilterSpec(reusableNodes, newSourceType, rexBuilder).ifPresent(specs::add);
+                Optional<FilterPushDownSpec> combinedFilter =
+                        buildOrFilterSpec(reusableNodes, newSourceType, rexBuilder);
+                if (combinedFilter.isEmpty()) {
+                    continue;
+                }
+                specs.add(combinedFilter.get());
             }
 
             // 2.5 Create a new ScanTableSource. ScanTableSource can not be pushed down twice.
@@ -340,13 +347,10 @@ public class ScanReuser {
     }
 
     /**
-     * OR all table scan filter into a combined FilterPushDownSpec for the unified source. Before
-     * returning, verifies the connector accepts the OR'd predicate by calling applyFilters on a
-     * throwaway copy. Returns empty if any scan has no filter or the connector rejects the OR.
-     * TODO, still on the fence if this should return empty or throw exception indicating source
-     * incompatible with this source reuse
+     * OR all table scan filter into a combined FilterPushDownSpec for the unified source. Calls
+     * applyFilters on a copy of source to verify source connector accepts filter. Returns empty if
+     * any scan has no filter or the connector rejects the OR.
      */
-    // todo remove extra comments once finalized approach
     private Optional<FilterPushDownSpec> buildOrFilterSpec(
             List<CommonPhysicalTableSourceScan> scans,
             RowType newSourceType,
@@ -367,7 +371,6 @@ public class ScanReuser {
                             newSourceType.getFieldNames());
             perScanFilters.add(andPredicates(fs.getPredicates(), remap, rexBuilder));
         }
-        // todo figure out when this could happen
         if (perScanFilters.isEmpty()) {
             return Optional.empty();
         }
@@ -380,8 +383,6 @@ public class ScanReuser {
 
         if (!connectorAcceptsFilter(
                 scans.get(0).tableSourceTable().tableSource(), combined, newSourceType)) {
-            // todo decide if exception thrown here instead of no filter being passed
-            // could be dangerous passing no filter
             return Optional.empty();
         }
 
@@ -397,7 +398,6 @@ public class ScanReuser {
         DynamicTableSource copy = source.copy();
         SourceAbilityContext context =
                 new SourceAbilityContext(flinkContext, flinkTypeFactory, sourceType);
-        // todo triple check the apply here is proper way to do this check is valid for ORs
         SupportsFilterPushDown.Result result =
                 FilterPushDownSpec.apply(List.of(filter), copy, context);
         return !result.getAcceptedFilters().isEmpty();
