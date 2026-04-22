@@ -46,6 +46,7 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexProgramBuilder;
 import org.apache.calcite.rex.RexShuttle;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 
 import java.util.ArrayList;
@@ -251,12 +252,19 @@ public class ScanReuser {
             // If the connector rejects the combined filter, skip this group entirely and revert
             // source back to non-table reuse behaviour
             if (mergeFilters) {
-                Optional<FilterPushDownSpec> combinedFilter =
-                        buildOrFilterSpec(reusableNodes, newSourceType, rexBuilder);
-                if (combinedFilter.isEmpty()) {
-                    continue;
+                RexNode combinedFilter =
+                        buildOrFilterPredicate(reusableNodes, newSourceType, rexBuilder);
+                if (!combinedFilter.isAlwaysTrue()) { // Require merged filter, not full table source
+                    if (!connectorAcceptsFilter(
+                            tableSource, combinedFilter, newSourceType)) {
+                        // Connector rejected the predicate, abort merge and leave each source scan
+                        // independent
+                        continue;
+                    } else {
+                        // Add merged OR'd filter to spec
+                        specs.add(new FilterPushDownSpec(List.of(combinedFilter), false));
+                    }
                 }
-                specs.add(combinedFilter.get());
             }
 
             // 2.5 Create a new ScanTableSource. ScanTableSource can not be pushed down twice.
@@ -340,30 +348,31 @@ public class ScanReuser {
             }
             for (RexNode pred : fs.getPredicates()) {
                 for (RexInputRef ref : FlinkRexUtil.findAllInputRefs(pred)) {
-                    allProjectFieldSet.add(new int[] {ref.getIndex()});
+                    allProjectFieldSet.add(new int[]{ref.getIndex()});
                 }
             }
         }
     }
 
     /**
-     * OR all table scan filter into a combined FilterPushDownSpec for the unified source. Calls
-     * applyFilters on a copy of source to verify source connector accepts filter. Returns empty if
-     * any scan has no filter or the connector rejects the OR.
+     * OR all per-scan filter predicates into a single combined predicate for the unified source.
+     * Any scan without a filter contributes a TRUE literal; after simplification the OR collapses
+     * to TRUE, meaning no effective filter. expandSearch rewrites Sarg back into standard OR/IN
+     * so connectors can parse. The caller is responsible for validating the predicate against the
+     * connector and deciding whether to push it.
      */
-    private Optional<FilterPushDownSpec> buildOrFilterSpec(
+    private RexNode buildOrFilterPredicate(
             List<CommonPhysicalTableSourceScan> scans,
             RowType newSourceType,
             RexBuilder rexBuilder) {
         List<RexNode> perScanFilters = new ArrayList<>();
-        // Get on Node per table source scan
         for (CommonPhysicalTableSourceScan scan : scans) {
             FilterPushDownSpec fs =
                     getAbilitySpec(
                             scan.tableSourceTable().abilitySpecs(), FilterPushDownSpec.class);
             if (fs == null || fs.getPredicates().isEmpty()) {
-                // OR with empty filter -> no filter
-                return Optional.empty();
+                perScanFilters.add(rexBuilder.makeLiteral(true));
+                continue;
             }
             RexShuttle remap =
                     createFieldNameRemap(
@@ -371,32 +380,14 @@ public class ScanReuser {
                             newSourceType.getFieldNames());
             perScanFilters.add(andPredicates(fs.getPredicates(), remap, rexBuilder));
         }
-        if (perScanFilters.isEmpty()) {
-            return Optional.empty();
-        }
 
-        // Deduplicate filters — e.g. 3 scans where 2 share the same filter
-        Set<String> seen = new HashSet<>();
-        List<RexNode> distinctFilters = new ArrayList<>();
-        for (RexNode f : perScanFilters) {
-            if (seen.add(f.toString())) {
-                distinctFilters.add(f);
-            }
+        RexNode combined = perScanFilters.get(0);
+        for (int i = 1; i < perScanFilters.size(); i++) {
+            combined = rexBuilder.makeCall(SqlStdOperatorTable.OR, combined, perScanFilters.get(i));
         }
-
-        RexNode combined = distinctFilters.get(0);
-        // OR distinct filters (if > 1) together
-        for (int i = 1; i < distinctFilters.size(); i++) {
-            combined =
-                    rexBuilder.makeCall(SqlStdOperatorTable.OR, combined, distinctFilters.get(i));
-        }
-
-        if (!connectorAcceptsFilter(
-                scans.get(0).tableSourceTable().tableSource(), combined, newSourceType)) {
-            return Optional.empty();
-        }
-
-        return Optional.of(new FilterPushDownSpec(List.of(combined), false));
+        combined = FlinkRexUtil.simplify(rexBuilder, combined, RexUtil.EXECUTOR);
+        combined = FlinkRexUtil.expandSearch(rexBuilder, combined);
+        return combined;
     }
 
     /**
@@ -435,10 +426,10 @@ public class ScanReuser {
     // needed because want to remap indicies from filter predicates to our unified scan
     private static List<String> physicalFieldNames(TableSourceTable source) {
         return ((RowType)
-                        source.contextResolvedTable()
-                                .getResolvedSchema()
-                                .toPhysicalRowDataType()
-                                .getLogicalType())
+                source.contextResolvedTable()
+                        .getResolvedSchema()
+                        .toPhysicalRowDataType()
+                        .getLogicalType())
                 .getFieldNames();
     }
 

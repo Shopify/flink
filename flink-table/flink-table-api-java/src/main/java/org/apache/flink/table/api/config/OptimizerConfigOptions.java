@@ -112,10 +112,18 @@ public class OptimizerConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "When it is true, the optimizer will try to reuse table sources that differ "
-                                    + "only in their pushed-down filters by moving filters into Calc nodes "
-                                    + "and sharing a single source reader. This works only when "
+                                    + "only in their pushed-down filters by OR'ing the filters into a "
+                                    + "combined predicate and sharing a single source reader. This works "
+                                    + "only when "
                                     + TABLE_OPTIMIZER_REUSE_SOURCE_ENABLED.key()
-                                    + " is true.");
+                                    + " is true and the connector supports filter pushdown. Note: it is "
+                                    + "not recommended to turn on unless you are aware of possible side "
+                                    + "effects. When the connector rejects the combined OR'd predicate, "
+                                    + "projection-reuse opportunities within the group may be lost compared "
+                                    + "to the default behaviour; no correctness issues arise (baseline reads "
+                                    + "continue unchanged), but the optimization's benefit is reduced. "
+                                    + "Recommended for connectors that natively accept OR predicates (e.g. "
+                                    + "BigQuery, JDBC).");
 
     @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH_STREAMING)
     public static final ConfigOption<Boolean> TABLE_OPTIMIZER_REUSE_SINK_ENABLED =
