@@ -375,10 +375,20 @@ public class ScanReuser {
             return Optional.empty();
         }
 
-        // more efficient way to write this
-        RexNode combined = perScanFilters.get(0);
-        for (int i = 1; i < perScanFilters.size(); i++) {
-            combined = rexBuilder.makeCall(SqlStdOperatorTable.OR, combined, perScanFilters.get(i));
+        // Deduplicate filters — e.g. 3 scans where 2 share the same filter
+        Set<String> seen = new HashSet<>();
+        List<RexNode> distinctFilters = new ArrayList<>();
+        for (RexNode f : perScanFilters) {
+            if (seen.add(f.toString())) {
+                distinctFilters.add(f);
+            }
+        }
+
+        RexNode combined = distinctFilters.get(0);
+        // OR distinct filters (if > 1) together
+        for (int i = 1; i < distinctFilters.size(); i++) {
+            combined =
+                    rexBuilder.makeCall(SqlStdOperatorTable.OR, combined, distinctFilters.get(i));
         }
 
         if (!connectorAcceptsFilter(
