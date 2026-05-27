@@ -407,15 +407,9 @@ public class OptimizerConfigOptions {
                             .enumType(ProjectFilterTransposeRule.class)
                             .defaultValue(ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE)
                             .withDescription(
-                                    "Selects which Calcite ProjectFilterTransposeRule variant the optimizer uses "
-                                            + "when pushing a Project past a Filter. "
-                                            + "PROJECT_FILTER_TRANSPOSE (default) splits Project expressions so only "
-                                            + "the columns referenced by the Filter remain below it. "
-                                            + "PROJECT_FILTER_TRANSPOSE_WHOLE_EXPRESSIONS preserves each top-level "
-                                            + "Project expression as a whole when pushing past the Filter. "
-                                            + "PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS treats the Project "
-                                            + "as atomic and only pushes it when the entire Project can move below "
-                                            + "the Filter - Required for nested projection pushdown + filters.");
+                                    "Selects which Calcite ProjectFilterTransposeRule variant the optimizer "
+                                            + "uses when pushing a Project past a Filter in the "
+                                            + "PROJECT_REWRITE phase.");
 
     /** Strategy for handling non-deterministic updates. */
     @PublicEvolving
@@ -527,7 +521,8 @@ public class OptimizerConfigOptions {
                 text(
                         "Pushes the Project past the Filter without splitting expressions. "
                                 + "Each top-level Project expression is preserved as a whole and "
-                                + "either pushed below the Filter or kept above it.")),
+                                + "either pushed below the Filter or kept above it."
+                                + "NOTE: Required for proper nested projection + filtering")),
         PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS(
                 text(
                         "Pushes the Project past the Filter only when the Project as a whole can be "
