@@ -254,11 +254,7 @@ object FlinkStreamProgram {
         .build()
     )
 
-    // TODO this pushing directly into rule set after the fact feels janky and not ideal
-    // find better way to do this
-    // project rewrite
-    // PROJECT_RULES carries CoreRules.PROJECT_FILTER_TRANSPOSE as the safe default for Volcano;
-    // here in HEP we swap it for the configured variant.
+    // In PROJECT_REWRITE we utilize user desired transposition method
     chainedProgram.addLast(
       PROJECT_REWRITE,
       FlinkHepRuleSetProgramBuilder.newBuilder
@@ -274,9 +270,7 @@ object FlinkStreamProgram {
 
     // optimize the logical plan
     // Note: the project-filter-transpose variant is intentionally NOT appended to the Volcano
-    // LOGICAL phase. The HEP PROJECT_REWRITE phase above already pushes the transpose down, and
-    // adding WHOLE_EXPRESSIONS here oscillates with FlinkFilterProjectTransposeRule in
-    // FILTER_RULES (no bloat protection), expanding the MEMO indefinitely.
+    // LOGICAL phase. Prevents infinite oscillation with optimization from PROJECT_REWRITE
     chainedProgram.addLast(
       LOGICAL,
       FlinkVolcanoProgramBuilder.newBuilder
