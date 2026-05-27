@@ -22,7 +22,12 @@ import org.apache.flink.table.api.config.OptimizerConfigOptions
 import org.apache.flink.table.planner.plan.nodes.FlinkConventions
 import org.apache.flink.table.planner.plan.rules.FlinkBatchRuleSets
 
+import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.plan.hep.HepMatchOrder
+import org.apache.calcite.rel.rules.CoreRules
+import org.apache.calcite.tools.{RuleSet, RuleSets}
+
+import scala.collection.JavaConverters._
 
 /** Defines a sequence of programs to optimize flink batch table plan. */
 object FlinkBatchProgram {
@@ -45,6 +50,7 @@ object FlinkBatchProgram {
 
   def buildProgram(tableConfig: ReadableConfig): FlinkChainedProgram[BatchOptimizeContext] = {
     val chainedProgram = new FlinkChainedProgram[BatchOptimizeContext]()
+    val projectFilterTransposeRule = pickProjectFilterTransposeRule(tableConfig)
 
     chainedProgram.addLast(
       // rewrite sub-queries to joins
@@ -240,16 +246,26 @@ object FlinkBatchProgram {
     )
 
     // window rewrite
+    // PROJECT_RULES carries CoreRules.PROJECT_FILTER_TRANSPOSE as the safe default for Volcano;
+    // here in HEP we swap it for the configured variant.
     chainedProgram.addLast(
       PROJECT_REWRITE,
       FlinkHepRuleSetProgramBuilder.newBuilder
         .setHepRulesExecutionType(HEP_RULES_EXECUTION_TYPE.RULE_COLLECTION)
         .setHepMatchOrder(HepMatchOrder.BOTTOM_UP)
-        .add(FlinkBatchRuleSets.PROJECT_RULES)
+        .add(
+          substituteRule(
+            FlinkBatchRuleSets.PROJECT_RULES,
+            CoreRules.PROJECT_FILTER_TRANSPOSE,
+            projectFilterTransposeRule))
         .build()
     )
 
     // optimize the logical plan
+    // Note: the project-filter-transpose variant is intentionally NOT appended to the Volcano
+    // LOGICAL phase. The HEP PROJECT_REWRITE phase above already pushes the transpose down, and
+    // adding WHOLE_EXPRESSIONS here oscillates with FlinkFilterProjectTransposeRule in
+    // FILTER_RULES (no bloat protection), expanding the MEMO indefinitely.
     chainedProgram.addLast(
       LOGICAL,
       FlinkVolcanoProgramBuilder.newBuilder
@@ -297,5 +313,24 @@ object FlinkBatchProgram {
     chainedProgram.addLast(RUNTIME_FILTER, new FlinkRuntimeFilterProgram)
 
     chainedProgram
+  }
+
+  private def pickProjectFilterTransposeRule(tableConfig: ReadableConfig): RelOptRule = {
+    tableConfig.get(OptimizerConfigOptions.TABLE_OPTIMIZER_PROJECT_FILTER_TRANSPOSE_RULE) match {
+      case OptimizerConfigOptions.ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE =>
+        CoreRules.PROJECT_FILTER_TRANSPOSE
+      case OptimizerConfigOptions.ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE_WHOLE_EXPRESSIONS =>
+        CoreRules.PROJECT_FILTER_TRANSPOSE_WHOLE_EXPRESSIONS
+      case OptimizerConfigOptions.ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS =>
+        CoreRules.PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS
+    }
+  }
+
+  private def substituteRule(base: RuleSet, oldRule: RelOptRule, newRule: RelOptRule): RuleSet = {
+    if (oldRule eq newRule) {
+      base
+    } else {
+      RuleSets.ofList((base.asScala.filterNot(_ eq oldRule) ++ Seq(newRule)).asJava)
+    }
   }
 }

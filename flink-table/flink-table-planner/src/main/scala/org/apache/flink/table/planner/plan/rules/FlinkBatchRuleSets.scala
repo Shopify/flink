@@ -204,9 +204,19 @@ object FlinkBatchRuleSets {
     CoreRules.AGGREGATE_VALUES
   )
 
-  /** RuleSet about project */
+  /**
+   * RuleSet about project.
+   *
+   * <p>Note: [[CoreRules.PROJECT_FILTER_TRANSPOSE]] is the safe default kept here so it propagates
+   * into [[LOGICAL_OPT_RULES]] for the Volcano LOGICAL phase. In the HEP `PROJECT_REWRITE` phase,
+   * [[FlinkBatchProgram.buildProgram]] substitutes the configured variant from
+   * [[OptimizerConfigOptions.TABLE_OPTIMIZER_PROJECT_FILTER_TRANSPOSE_RULE]]. The aggressive
+   * `WHOLE_EXPRESSIONS` variant must NOT reach Volcano — it oscillates with
+   * [[FlinkFilterProjectTransposeRule]] when bloat protection is bypassed. See
+   * PROJECT_FILTER_TRANSPOSE_HANG.md.
+   */
   val PROJECT_RULES: RuleSet = RuleSets.ofList(
-    // push a projection past a filter
+    // push a projection past a filter (safe default; HEP swaps in the configured variant)
     CoreRules.PROJECT_FILTER_TRANSPOSE,
     // push a projection to the children of a non semi/anti join
     // push all expressions to handle the time indicator correctly

@@ -24,7 +24,12 @@ import org.apache.flink.table.planner.plan.rules.FlinkStreamRuleSets
 import org.apache.flink.table.planner.plan.rules.logical.EventTimeTemporalJoinRewriteRule
 import org.apache.flink.table.planner.plan.rules.physical.stream.{FlinkDuplicateChangesTraitInitProgram, FlinkMarkChangelogNormalizeProgram}
 
+import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.plan.hep.HepMatchOrder
+import org.apache.calcite.rel.rules.CoreRules
+import org.apache.calcite.tools.{RuleSet, RuleSets}
+
+import scala.collection.JavaConverters._
 
 /** Defines a sequence of programs to optimize for stream table plan. */
 object FlinkStreamProgram {
@@ -45,6 +50,7 @@ object FlinkStreamProgram {
 
   def buildProgram(tableConfig: ReadableConfig): FlinkChainedProgram[StreamOptimizeContext] = {
     val chainedProgram = new FlinkChainedProgram[StreamOptimizeContext]()
+    val projectFilterTransposeRule = pickProjectFilterTransposeRule(tableConfig)
 
     // rewrite sub-queries to joins
     chainedProgram.addLast(
@@ -248,17 +254,29 @@ object FlinkStreamProgram {
         .build()
     )
 
+    // TODO this pushing directly into rule set after the fact feels janky and not ideal
+    // find better way to do this
     // project rewrite
+    // PROJECT_RULES carries CoreRules.PROJECT_FILTER_TRANSPOSE as the safe default for Volcano;
+    // here in HEP we swap it for the configured variant.
     chainedProgram.addLast(
       PROJECT_REWRITE,
       FlinkHepRuleSetProgramBuilder.newBuilder
         .setHepRulesExecutionType(HEP_RULES_EXECUTION_TYPE.RULE_COLLECTION)
         .setHepMatchOrder(HepMatchOrder.BOTTOM_UP)
-        .add(FlinkStreamRuleSets.PROJECT_RULES)
+        .add(
+          substituteRule(
+            FlinkStreamRuleSets.PROJECT_RULES,
+            CoreRules.PROJECT_FILTER_TRANSPOSE,
+            projectFilterTransposeRule))
         .build()
     )
 
     // optimize the logical plan
+    // Note: the project-filter-transpose variant is intentionally NOT appended to the Volcano
+    // LOGICAL phase. The HEP PROJECT_REWRITE phase above already pushes the transpose down, and
+    // adding WHOLE_EXPRESSIONS here oscillates with FlinkFilterProjectTransposeRule in
+    // FILTER_RULES (no bloat protection), expanding the MEMO indefinitely.
     chainedProgram.addLast(
       LOGICAL,
       FlinkVolcanoProgramBuilder.newBuilder
@@ -359,5 +377,24 @@ object FlinkStreamProgram {
     )
 
     chainedProgram
+  }
+
+  private def pickProjectFilterTransposeRule(tableConfig: ReadableConfig): RelOptRule = {
+    tableConfig.get(OptimizerConfigOptions.TABLE_OPTIMIZER_PROJECT_FILTER_TRANSPOSE_RULE) match {
+      case OptimizerConfigOptions.ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE =>
+        CoreRules.PROJECT_FILTER_TRANSPOSE
+      case OptimizerConfigOptions.ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE_WHOLE_EXPRESSIONS =>
+        CoreRules.PROJECT_FILTER_TRANSPOSE_WHOLE_EXPRESSIONS
+      case OptimizerConfigOptions.ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS =>
+        CoreRules.PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS
+    }
+  }
+
+  private def substituteRule(base: RuleSet, oldRule: RelOptRule, newRule: RelOptRule): RuleSet = {
+    if (oldRule eq newRule) {
+      base
+    } else {
+      RuleSets.ofList((base.asScala.filterNot(_ eq oldRule) ++ Seq(newRule)).asJava)
+    }
   }
 }
