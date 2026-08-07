@@ -43,11 +43,19 @@ import static org.apache.flink.table.functions.BuiltInFunctionDefinitions.UPPER;
 public class FilterUtils {
 
     public static boolean shouldPushDown(ResolvedExpression expr, Set<String> filterableFields) {
-        if (expr instanceof CallExpression && expr.getChildren().size() == 2) {
-            return shouldPushDownUnaryExpression(
-                            expr.getResolvedChildren().get(0), filterableFields)
-                    && shouldPushDownUnaryExpression(
-                            expr.getResolvedChildren().get(1), filterableFields);
+        if (expr instanceof CallExpression) {
+            FunctionDefinition def = ((CallExpression) expr).getFunctionDefinition();
+            if (def.equals(BuiltInFunctionDefinitions.OR)
+                    || def.equals(BuiltInFunctionDefinitions.AND)) {
+                return expr.getResolvedChildren().stream()
+                        .allMatch(child -> shouldPushDown(child, filterableFields));
+            }
+            if (expr.getChildren().size() == 2) {
+                return shouldPushDownUnaryExpression(
+                                expr.getResolvedChildren().get(0), filterableFields)
+                        && shouldPushDownUnaryExpression(
+                                expr.getResolvedChildren().get(1), filterableFields);
+            }
         }
         return false;
     }
