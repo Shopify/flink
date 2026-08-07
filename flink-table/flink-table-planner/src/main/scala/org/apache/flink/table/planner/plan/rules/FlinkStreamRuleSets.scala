@@ -207,9 +207,8 @@ object FlinkStreamRuleSets {
     CoreRules.AGGREGATE_VALUES
   )
 
-  /** RuleSet about project */
   val PROJECT_RULES: RuleSet = RuleSets.ofList(
-    // push a projection past a filter
+    // push a projection past a filter (safe default; HEP swaps in the configured variant)
     CoreRules.PROJECT_FILTER_TRANSPOSE,
     // push a projection to the children of a non semi/anti join
     // push all expressions to handle the time indicator correctly

@@ -400,6 +400,17 @@ public class OptimizerConfigOptions {
                     .withDescription(
                             "Strategy for optimizing the delta-join. Only AUTO, FORCE or NONE can be set. Default it AUTO.");
 
+    @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH_STREAMING)
+    public static final ConfigOption<ProjectFilterTransposeRule>
+            TABLE_OPTIMIZER_PROJECT_FILTER_TRANSPOSE_RULE =
+                    key("table.optimizer.project-filter-transpose-rule")
+                            .enumType(ProjectFilterTransposeRule.class)
+                            .defaultValue(ProjectFilterTransposeRule.PROJECT_FILTER_TRANSPOSE)
+                            .withDescription(
+                                    "Selects which Calcite ProjectFilterTransposeRule variant the optimizer "
+                                            + "uses when pushing a Project past a Filter in the "
+                                            + "PROJECT_REWRITE phase.");
+
     /** Strategy for handling non-deterministic updates. */
     @PublicEvolving
     public enum NonDeterministicUpdateStrategy {
@@ -488,6 +499,39 @@ public class OptimizerConfigOptions {
         private final InlineElement description;
 
         DeltaJoinStrategy(InlineElement description) {
+            this.description = description;
+        }
+
+        @Override
+        public InlineElement getDescription() {
+            return description;
+        }
+    }
+
+    /**
+     * Variant of Calcite's ProjectFilterTransposeRule used when pushing a Project past a Filter.
+     */
+    @PublicEvolving
+    public enum ProjectFilterTransposeRule implements DescribedEnum {
+        PROJECT_FILTER_TRANSPOSE(
+                text(
+                        "Default variant. Pushes a Project past a Filter, splitting expressions "
+                                + "so that only the columns referenced by the Filter remain below it.")),
+        PROJECT_FILTER_TRANSPOSE_WHOLE_EXPRESSIONS(
+                text(
+                        "Pushes the Project past the Filter without splitting expressions. "
+                                + "Each top-level Project expression is preserved as a whole and "
+                                + "either pushed below the Filter or kept above it."
+                                + "NOTE: Required for proper nested projection + filtering")),
+        PROJECT_FILTER_TRANSPOSE_WHOLE_PROJECT_EXPRESSIONS(
+                text(
+                        "Pushes the Project past the Filter only when the Project as a whole can be "
+                                + "moved below the Filter; the Project is treated as atomic and is "
+                                + "never split."));
+
+        private final InlineElement description;
+
+        ProjectFilterTransposeRule(InlineElement description) {
             this.description = description;
         }
 
